@@ -58,3 +58,5 @@ tmp/
 
 #.md
 *.md
+!README.md
+!COPYRIGHT_PROTECTION.md
