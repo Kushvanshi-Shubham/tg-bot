@@ -55,3 +55,6 @@ bot.log
 *.tmp
 temp/
 tmp/
+
+#.md
+*.md
