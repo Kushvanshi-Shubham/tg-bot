@@ -1,0 +1,15 @@
+.git
+.gitignore
+.venv
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.md
+!README.md
+.env.example
+deals.db
+check_db.py
+fix_buyer.py
+update_group_id.py

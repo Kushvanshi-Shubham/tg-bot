@@ -1,0 +1,14 @@
+version: '3.8'
+
+services:
+  telegram-bot:
+    build: .
+    container_name: tg-usdt-bot
+    restart: unless-stopped
+    volumes:
+      - ./deals.db:/app/deals.db
+      - ./data:/app/data
+    env_file:
+      - .env
+    environment:
+      - PYTHONUNBUFFERED=1
