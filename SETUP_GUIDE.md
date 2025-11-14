@@ -28,18 +28,17 @@
 ### 1. Environment Variables (.env)
 ```env
 # Bot Configuration
-BOT_TOKEN=8439656332:AAEXDOnnzT6NXMxYOXIxYm85yGVGmZ6y_fs
-ADMIN_IDS=7468554137
+BOT_TOKEN=
+ADMIN_IDS=
 
 # Main group + Deal room pools
-GROUP_CHAT_IDS=-5004801923,-1001234567890,-1001234567891
+GROUP_CHAT_IDS=
 
 # Payment Methods (comma-separated)
 PAYMENT_METHODS=UPI,Bank Transfer,CDM,Cash Deposit,PayPal
 
 # Legacy (for backward compatibility)
 USDT_ADDRESS=TYourOldAddressHere
-FEE_INFO=Platform fee: 0.5% + 1 USDT
 
 # Network-Specific Addresses (REQUIRED)
 ADMIN_USDT_BSC=0xYourBSCAddress
