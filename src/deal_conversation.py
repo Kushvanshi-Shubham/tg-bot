@@ -1,4 +1,9 @@
-"""Interactive deal creation conversation handler."""
+"""
+Interactive deal creation conversation handler.
+
+Copyright (c) 2025 @killerbesto
+All Rights Reserved.
+"""
 from __future__ import annotations
 
 import logging
@@ -121,7 +126,9 @@ async def deal_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
         f"👤 Initiator: {initiator_display}\n"
         f"👤 Counterparty: {counterparty_display}\n\n"
         f"🔗 Private Deal Room:\n{invite_link}\n\n"
-        f"⚠️ Click the link to join. Only authorized participants can join."
+        f"⚠️ Click the link to join. Only authorized participants can join.\n\n"
+        f"━━━━━━━━━━━━━━━━━\n"
+        f"🤖 Bot by @killerbesto"
     )
     
     await msg.reply_text(reply_text)  # Removed parse_mode="Markdown"

@@ -1,0 +1,80 @@
+PROPRIETARY LICENSE
+
+Copyright (c) 2025 @killerbesto
+All Rights Reserved.
+
+Telegram P2P Deal Bot
+Developer: @killerbesto (https://t.me/killerbesto)
+Developer Email: shubhamkushvanshi@gmail.com
+
+TERMS AND CONDITIONS
+
+1. COPYRIGHT NOTICE
+   This software and all associated files (the "Software") are the exclusive 
+   property of @killerbesto. All copyright notices, credits, and attribution 
+   must remain intact in all copies or substantial portions of the Software.
+
+2. RESTRICTIONS
+   You are NOT permitted to:
+   - Remove or modify any copyright notices, credits, or developer attribution
+   - Remove or modify the "@killerbesto" branding from bot messages
+   - Claim authorship or ownership of this Software
+   - Distribute modified versions without explicit written permission
+   - Use this Software for commercial purposes without a license
+   - Remove the built-in copyright protection mechanisms
+
+3. USAGE RIGHTS
+   Subject to the terms of this license, you may:
+   - Use the Software for personal or internal business purposes
+   - Modify the Software for your own use (while retaining all copyright notices)
+   - Deploy the Software on your own servers
+
+4. ATTRIBUTION REQUIREMENTS
+   All deployments of this Software MUST:
+   - Display "@killerbesto" attribution in the /start command
+   - Include developer credits in deal completion messages
+   - Retain all copyright notices in source code files
+   - Credit @killerbesto in any documentation or public-facing materials
+
+5. ENFORCEMENT
+   Violation of this license, including but not limited to removal of copyright
+   notices or developer attribution, will result in:
+   - Immediate termination of your license to use this Software
+   - Legal action for copyright infringement
+   - Claims for damages and legal fees
+
+6. DISCLAIMER OF WARRANTY
+   THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+   IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+   FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+   AUTHOR BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN
+   ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
+   WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+7. LIMITATION OF LIABILITY
+   IN NO EVENT SHALL @killerbesto BE LIABLE FOR ANY SPECIAL, INCIDENTAL,
+   INDIRECT, OR CONSEQUENTIAL DAMAGES WHATSOEVER ARISING OUT OF THE USE OF
+   OR INABILITY TO USE THE SOFTWARE.
+
+8. CONTACT
+   For licensing inquiries, custom development, or permissions:
+   Telegram: @killerbesto
+
+9. GOVERNING LAW
+   This license shall be governed by and construed in accordance with applicable
+   copyright and intellectual property laws.
+
+By using this Software, you acknowledge that you have read this license,
+understand it, and agree to be bound by its terms and conditions.
+
+================================================================================
+
+DEVELOPER ATTRIBUTION (DO NOT REMOVE):
+
+Bot Developer: @killerbesto
+Telegram: https://t.me/killerbesto
+Copyright: 2025 - All Rights Reserved
+
+This notice must remain in all copies or substantial portions of the Software.
+
+================================================================================

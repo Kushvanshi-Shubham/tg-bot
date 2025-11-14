@@ -1,4 +1,9 @@
-"""Transaction submission conversation handler."""
+"""
+Transaction submission conversation handler.
+
+Copyright (c) 2025 @killerbesto
+All Rights Reserved.
+"""
 from __future__ import annotations
 
 import logging

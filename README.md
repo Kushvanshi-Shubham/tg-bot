@@ -1,6 +1,11 @@
-# Telegram Deal Bot
+# Telegram P2P Deal Bot
 
 Automated Telegram bot to manage peer-to-peer USDT deals between two users using a pool of pre-created private groups.
+
+**Developer:** [@killerbesto](https://t.me/killerbesto)  
+**Copyright:** © 2025 - All Rights Reserved
+
+---
 
 ## Features
 - 📝 `/deal` — Interactive deal creation with step-by-step guidance:
@@ -158,5 +163,21 @@ The bot must be an **admin** in each group with at least:
 - Use PostgreSQL for production and connection pooling.
 - Keep `.env` secret; add to `.gitignore`.
 
-## License
-MIT
+---
+
+## 👨‍💻 Developer
+
+**Created by:** [@killerbesto](https://t.me/killerbesto)
+
+For custom bot development, contact: [@killerbesto](https://t.me/killerbesto)
+
+## 📄 License
+
+Copyright © 2025 @killerbesto - All Rights Reserved
+
+This bot is proprietary software developed by @killerbesto.  
+Unauthorized copying, modification, distribution, or removal of copyright notices is strictly prohibited.
+
+---
+
+**⚠️ IMPORTANT:** This software includes built-in copyright protection. Any attempt to remove or modify copyright notices from the code or bot messages will violate the license agreement.

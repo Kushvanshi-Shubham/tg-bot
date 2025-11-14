@@ -1,4 +1,9 @@
-"""Simple async SQLite helper for deals."""
+"""
+Simple async SQLite helper for deals.
+
+Copyright (c) 2025 @killerbesto
+All Rights Reserved.
+"""
 from __future__ import annotations
 
 import aiosqlite

@@ -1,4 +1,10 @@
-"""Main Telegram bot for deal flow with group pool."""
+"""
+Main Telegram bot for deal flow with group pool.
+
+Copyright (c) 2025 @killerbesto
+Bot Developer: @killerbesto
+All Rights Reserved.
+"""
 from __future__ import annotations
 
 import os
@@ -22,6 +28,31 @@ from telegram.error import TelegramError
 from . import db
 
 load_dotenv()
+
+# Bot metadata - DO NOT REMOVE - PROTECTED BY LICENSE
+__author__ = "@killerbesto"
+__copyright__ = "Copyright (c) 2025 @killerbesto"
+__version__ = "1.0.0"
+__license__ = "Proprietary"
+__developer__ = "https://t.me/killerbesto"
+
+# Copyright validation - DO NOT MODIFY
+_REQUIRED_CREDITS = {
+    "developer": "@killerbesto",
+    "telegram": "https://t.me/killerbesto",
+    "year": "2025"
+}
+
+def _verify_integrity():
+    """Verify copyright notices are intact - DO NOT REMOVE"""
+    if __author__ != "@killerbesto":
+        raise RuntimeError("Copyright violation detected")
+    if "killerbesto" not in __copyright__.lower():
+        raise RuntimeError("Copyright violation detected")
+    return True
+
+# Validate on import
+_verify_integrity()
 
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
 ADMIN_IDS = [int(x.strip()) for x in os.environ.get("ADMIN_IDS", "").split(",") if x.strip()]
@@ -161,7 +192,10 @@ async def _show_deal_summary_for_acceptance(context: ContextTypes.DEFAULT_TYPE, 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     await update.message.reply_text(
         "Hi! Welcome to the P2P Deal Bot.\n\n"
-        "Use /deal to create a new deal with step-by-step guidance."
+        "Use /deal to create a new deal with step-by-step guidance.\n\n"
+        "━━━━━━━━━━━━━━━━━\n"
+        "🤖 Bot developed by @killerbesto\n"
+        "© 2025 All Rights Reserved"
     )
 
 
@@ -1524,7 +1558,9 @@ async def callback_query_handler(update: Update, context: ContextTypes.DEFAULT_T
                 text=(
                     f"🎉 **Deal #{deal_id} Completed!**\n\n"
                     f"Both parties confirmed completion.\n"
-                    f"Thank you for using our service!"
+                    f"Thank you for using our service!\n\n"
+                    f"━━━━━━━━━━━━━━━━━\n"
+                    f"🤖 Bot by @killerbesto"
                 ),
                 parse_mode="Markdown"
             )
@@ -1790,9 +1826,22 @@ async def setup_bot_commands(app) -> None:
 
 
 def main() -> None:
+    """
+    Main entry point for the Telegram bot.
+    
+    Bot Developer: @killerbesto
+    Copyright (c) 2025
+    """
     if not BOT_TOKEN:
         print("Please set BOT_TOKEN in environment (.env) and restart.")
         return
+    
+    # Print copyright notice
+    print("=" * 50)
+    print("  Telegram P2P Deal Bot")
+    print("  Developer: @killerbesto")
+    print("  Copyright (c) 2025 - All Rights Reserved")
+    print("=" * 50)
 
     # initialize DB and load groups (single asyncio.run call)
     asyncio.run(initialize_db_and_groups())
@@ -1825,7 +1874,7 @@ def main() -> None:
     
     app.post_init = post_init
 
-    logger.info("Bot started")
+    logger.info("Bot started successfully - Developer: @killerbesto")
     app.run_polling()
 
 
