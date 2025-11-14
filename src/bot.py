@@ -59,6 +59,16 @@ ADMIN_IDS = [int(x.strip()) for x in os.environ.get("ADMIN_IDS", "").split(",") 
 USDT_ADDRESS = os.environ.get("USDT_ADDRESS", "")
 MAIN_GROUP_ID = int(os.environ.get("MAIN_GROUP_ID", "0")) if os.environ.get("MAIN_GROUP_ID") else None
 GROUP_CHAT_IDS = [int(x.strip()) for x in os.environ.get("GROUP_CHAT_IDS", "").split(",") if x.strip()]
+
+# Message constants
+MSG_DEAL_NOT_FOUND = "Deal not found."
+MSG_THE_SELLER = "the seller"
+MSG_THE_BUYER = "the buyer"
+MSG_THE_INITIATOR = "the initiator"
+MSG_THE_COUNTERPARTY = "the counterparty"
+DEVELOPER_CREDIT = "@killerbesto"
+BOT_SIGNATURE = f"🤖 Bot by {DEVELOPER_CREDIT}"
+BOT_DEVELOPER_CREDIT = f"🤖 Bot developed by {DEVELOPER_CREDIT}"
 LOGS_GROUP_ID = int(os.environ.get("LOGS_GROUP_ID", "0")) if os.environ.get("LOGS_GROUP_ID") else None
 PAYMENT_METHODS = [x.strip() for x in os.environ.get("PAYMENT_METHODS", "UPI,Bank Transfer,CDM,Cash Deposit,PayPal").split(",") if x.strip()]
 
@@ -120,19 +130,18 @@ async def _show_deal_summary_for_acceptance(context: ContextTypes.DEFAULT_TYPE, 
         target_chat = await context.bot.get_chat(deal["target_id"])
         initiator_name = f"@{initiator_chat.username}" if initiator_chat.username else (initiator_chat.full_name or f"User {deal['initiator_id']}")
         target_name = f"@{target_chat.username}" if target_chat.username else (target_chat.full_name or f"User {deal['target_id']}")
-    except:
+    except Exception:
         initiator_name = f"User {deal['initiator_id']}"
         target_name = f"User {deal['target_id']}"
     
     role = deal.get("initiator_role", "Unknown")
-    counterparty_role = "seller" if role == "buyer" else "buyer"
     amount = deal.get("amount", "Unknown")
     network = deal.get("network")
     surcharge = deal.get("surcharge_usdt", 0.0)
     
     # Build summary based on who is initiator (seller or buyer)
     summary = (
-        f"📋 **Deal Summary - Please Review**\n"
+        "📋 **Deal Summary - Please Review**\n"
         f"{'='*40}\n\n"
     )
     
@@ -148,7 +157,7 @@ async def _show_deal_summary_for_acceptance(context: ContextTypes.DEFAULT_TYPE, 
         if network:
             surcharge_text = "" if surcharge == 0 else f" (+${surcharge} surcharge)"
             summary += f"🌐 **Network:** {network}{surcharge_text}\n"
-        summary += f"\n**After accepting, you will propose your INR rate.**\n\n"
+        summary += "\n**After accepting, you will propose your INR rate.**\n\n"
     else:
         # BUYER initiated - showing to SELLER
         inr_rate = deal.get("inr_rate")
@@ -168,7 +177,7 @@ async def _show_deal_summary_for_acceptance(context: ContextTypes.DEFAULT_TYPE, 
                 rate_val = float(str(inr_rate).replace(',', ''))
                 usdt_equiv = inr_val / rate_val
                 summary += f"💵 **You will send:** ~{usdt_equiv:.2f} USDT\n"
-            except:
+            except Exception:
                 pass
         if payment_method:
             summary += f"💳 **Payment Method:** {payment_method}\n"
@@ -194,7 +203,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         "Hi! Welcome to the P2P Deal Bot.\n\n"
         "Use /deal to create a new deal with step-by-step guidance.\n\n"
         "━━━━━━━━━━━━━━━━━\n"
-        "🤖 Bot developed by @killerbesto\n"
+        f"{BOT_DEVELOPER_CREDIT}\n"
         "© 2025 All Rights Reserved"
     )
 
@@ -275,10 +284,10 @@ async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if not target_chat:
         await msg.reply_text(
             f"❌ Couldn't find user '{target}'.\n\n"
-            f"Make sure:\n"
-            f"• They have a public @username, OR\n"
-            f"• They've sent /start to the bot first\n\n"
-            f"You can also use their numeric user ID instead of username."
+            "Make sure:\n"
+            "• They have a public @username, OR\n"
+            "• They've sent /start to the bot first\n\n"
+            "You can also use their numeric user ID instead of username."
         )
         return
 
@@ -291,9 +300,9 @@ async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         # check if any groups exist at all
         total_groups = len(GROUP_CHAT_IDS)
         await msg.reply_text(
-            f"❌ No deal rooms available right now.\n"
+            "❌ No deal rooms available right now.\n"
             f"Total groups in pool: {total_groups}\n\n"
-            f"Admin can check status with /list_groups and free stuck groups with /release_group <chat_id>"
+            "Admin can check status with /list_groups and free stuck groups with /release_group <chat_id>"
         )
         return
 
@@ -328,7 +337,7 @@ async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     instructions = (
         f"Deal request created (ID {deal_id}).\n"
         f"Click the link below to join the private deal room:\n{invite_link}\n\n"
-        f"Once both of you join, the seller will be asked to accept the deal."
+        "Once both of you join, the seller will be asked to accept the deal."
     )
     
     # send to initiator
@@ -354,7 +363,7 @@ async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     elif initiator_sent and not target_sent:
         await msg.reply_text(
             f"Deal request created (ID {deal_id}).\n"
-            f"✅ Invite link sent to you.\n"
+            "✅ Invite link sent to you.\n"
             f"❌ Could not send to {target}. They must send /start to the bot first.\n\n"
             f"Share this link with them manually:\n{invite_link}"
         )
@@ -475,7 +484,7 @@ async def handle_new_chat_members(update: Update, context: ContextTypes.DEFAULT_
             target_chat = await context.bot.get_chat(deal["target_id"])
             initiator_name = f"@{initiator_chat.username}" if initiator_chat.username else (initiator_chat.full_name or f"User {deal['initiator_id']}")
             target_name = f"@{target_chat.username}" if target_chat.username else (target_chat.full_name or f"User {deal['target_id']}")
-        except:
+        except Exception:
             initiator_name = f"User {deal['initiator_id']}"
             target_name = f"User {deal['target_id']}"
         
@@ -484,7 +493,7 @@ async def handle_new_chat_members(update: Update, context: ContextTypes.DEFAULT_
             f"👋 Welcome to Deal #{deal['id']}!\n\n"
             f"👤 Initiator: {initiator_name}\n"
             f"👤 Counterparty: {target_name}\n\n"
-            f"Let's start the deal process!\n"
+            "Let's start the deal process!\n"
             f"{initiator_name}, please select your role:"
         )
         
@@ -556,16 +565,16 @@ async def handle_group_messages(update: Update, context: ContextTypes.DEFAULT_TY
             seller_name = f"@{seller_chat.username}" if seller_chat.username else (seller_chat.full_name or f"User {seller_id}")
             buyer_chat = await context.bot.get_chat(buyer_id)
             buyer_name = f"@{buyer_chat.username}" if buyer_chat.username else (buyer_chat.full_name or f"User {buyer_id}")
-        except:
+        except Exception:
             seller_name = f"User {seller_id}"
             buyer_name = f"User {buyer_id}"
         
         # Show detailed calculation to seller for approval
         summary = (
-            f"📊 **Rate Proposal from Buyer**\n"
+            "📊 **Rate Proposal from Buyer**\n"
             f"{'='*40}\n\n"
             f"💱 **Proposed Rate:** ₹{rate_val}/USDT\n\n"
-            f"📝 **Calculation:**\n"
+            "📝 **Calculation:**\n"
             f"• USDT Amount: {amount_num} USDT\n"
             f"• Network: {network}\n"
         )
@@ -618,9 +627,9 @@ async def handle_group_messages(update: Update, context: ContextTypes.DEFAULT_TY
         await context.bot.send_message(
             chat_id=deal["group_chat_id"],
             text=(
-                f"🔍 **Transaction Submitted - Admin Review Required**\n\n"
+                "🔍 **Transaction Submitted - Admin Review Required**\n\n"
                 f"🔗 TX Link: {text}\n\n"
-                f"Admin: Please verify the transaction and click below."
+                "Admin: Please verify the transaction and click below."
             ),
             reply_markup=admin_buttons
         )
@@ -664,9 +673,9 @@ async def handle_group_messages(update: Update, context: ContextTypes.DEFAULT_TY
             )
             keyboard = InlineKeyboardMarkup([
                 [InlineKeyboardButton("BSC (BEP20) - No Fee", callback_data=f"start_network:{deal['id']}:BSC")],
-                [InlineKeyboardButton(f"TRON (TRC20) +$0.70", callback_data=f"start_network:{deal['id']}:TRON")],
-                [InlineKeyboardButton(f"BASE +$0.70", callback_data=f"start_network:{deal['id']}:BASE")],
-                [InlineKeyboardButton(f"Solana +$0.70", callback_data=f"start_network:{deal['id']}:SOL")],
+                [InlineKeyboardButton("TRON (TRC20) +$0.70", callback_data=f"start_network:{deal['id']}:TRON")],
+                [InlineKeyboardButton("BASE +$0.70", callback_data=f"start_network:{deal['id']}:BASE")],
+                [InlineKeyboardButton("Solana +$0.70", callback_data=f"start_network:{deal['id']}:SOL")],
             ])
             await msg.reply_text("Select network:", reply_markup=keyboard)
         else:
@@ -708,8 +717,8 @@ async def callback_query_handler(update: Update, context: ContextTypes.DEFAULT_T
         deal_id = int(deal_id_str)
         deal = await db.get_deal(deal_id)
         if not deal:
-            await q.answer("Deal not found.", show_alert=True)
-            await q.edit_message_text("Deal not found.")
+            await q.answer(MSG_DEAL_NOT_FOUND, show_alert=True)
+            await q.edit_message_text(MSG_DEAL_NOT_FOUND)
             return
 
         # Verify it's the initiator
@@ -717,8 +726,8 @@ async def callback_query_handler(update: Update, context: ContextTypes.DEFAULT_T
             try:
                 initiator_chat = await context.bot.get_chat(deal["initiator_id"])
                 initiator_name = f"@{initiator_chat.username}" if initiator_chat.username else initiator_chat.full_name
-            except:
-                initiator_name = "the initiator"
+            except Exception:
+                initiator_name = MSG_THE_INITIATOR
             await q.answer(f"⚠️ This is the INITIATOR's action. Wait for {initiator_name} to select role.", show_alert=True)
             return
         
@@ -734,18 +743,18 @@ async def callback_query_handler(update: Update, context: ContextTypes.DEFAULT_T
             # Seller sells USDT
             await db.update_deal(deal_id, currency="crypto")
             await q.edit_message_text(
-                f"💰 Role selected: SELLER\n"
-                f"💵 You are selling: USDT\n\n"
-                f"Please type the USDT amount you want to sell (e.g., 100):"
+                "💰 Role selected: SELLER\n"
+                "💵 You are selling: USDT\n\n"
+                "Please type the USDT amount you want to sell (e.g., 100):"
             )
         else:
             # Buyer pays INR, receives USDT
             await db.update_deal(deal_id, currency="inr")
             await q.edit_message_text(
-                f"🛒 Role selected: BUYER\n"
-                f"💵 You are paying with: INR\n"
-                f"🪙 You will receive: USDT\n\n"
-                f"Please type the USDT amount you want to buy (e.g., 100):"
+                "🛒 Role selected: BUYER\n"
+                "💵 You are paying with: INR\n"
+                "🪙 You will receive: USDT\n\n"
+                "Please type the USDT amount you want to buy (e.g., 100):"
             )
 
     # DEPRECATED: Currency selection removed - USDT only now
@@ -756,7 +765,7 @@ async def callback_query_handler(update: Update, context: ContextTypes.DEFAULT_T
         deal_id = int(deal_id_str)
         deal = await db.get_deal(deal_id)
         if not deal:
-            await q.edit_message_text("Deal not found.")
+            await q.edit_message_text(MSG_DEAL_NOT_FOUND)
             return
 
         # Verify it's the initiator
@@ -764,8 +773,8 @@ async def callback_query_handler(update: Update, context: ContextTypes.DEFAULT_T
             try:
                 initiator_chat = await context.bot.get_chat(deal["initiator_id"])
                 initiator_name = f"@{initiator_chat.username}" if initiator_chat.username else initiator_chat.full_name
-            except:
-                initiator_name = "the initiator"
+            except Exception:
+                initiator_name = MSG_THE_INITIATOR
             await q.answer(f"⚠️ This is the INITIATOR's action. Wait for {initiator_name} to select the network.", show_alert=True)
             return
         
@@ -796,7 +805,7 @@ async def callback_query_handler(update: Update, context: ContextTypes.DEFAULT_T
         deal_id = int(deal_id_str)
         deal = await db.get_deal(deal_id)
         if not deal:
-            await q.edit_message_text("Deal not found.")
+            await q.edit_message_text(MSG_DEAL_NOT_FOUND)
             return
 
         # Verify it's the initiator
@@ -804,8 +813,8 @@ async def callback_query_handler(update: Update, context: ContextTypes.DEFAULT_T
             try:
                 initiator_chat = await context.bot.get_chat(deal["initiator_id"])
                 initiator_name = f"@{initiator_chat.username}" if initiator_chat.username else initiator_chat.full_name
-            except:
-                initiator_name = "the initiator"
+            except Exception:
+                initiator_name = MSG_THE_INITIATOR
             await q.answer(f"⚠️ This is the INITIATOR's action. Wait for {initiator_name} to select payment method.", show_alert=True)
             return
         
@@ -822,19 +831,18 @@ async def callback_query_handler(update: Update, context: ContextTypes.DEFAULT_T
             target_chat = await context.bot.get_chat(deal["target_id"])
             initiator_name = f"@{initiator_chat.username}" if initiator_chat.username else (initiator_chat.full_name or f"User {deal['initiator_id']}")
             target_name = f"@{target_chat.username}" if target_chat.username else (target_chat.full_name or f"User {deal['target_id']}")
-        except:
+        except Exception:
             initiator_name = f"User {deal['initiator_id']}"
             target_name = f"User {deal['target_id']}"
         
         # Determine who is buyer/seller
         role = deal.get("initiator_role", "Unknown")
-        counterparty_role = "seller" if role == "buyer" else "buyer"
         amount = deal.get("amount", "Unknown")
         inr_rate = deal.get("inr_rate")
         
         # Build comprehensive summary for BUYER (INR) initiator
         summary = (
-            f"📋 **Deal Summary - Please Review**\n"
+            "📋 **Deal Summary - Please Review**\n"
             f"{'='*40}\n\n"
             f"👤 **{initiator_name}** (Initiator - BUYER)\n"
             f"👤 **{target_name}** (Counterparty - SELLER)\n\n"
@@ -851,7 +859,7 @@ async def callback_query_handler(update: Update, context: ContextTypes.DEFAULT_T
                 rate_val = float(str(inr_rate).replace(',', ''))
                 usdt_equiv = inr_val / rate_val
                 summary += f"💵 **You will receive:** ~{usdt_equiv:.2f} USDT\n"
-            except:
+            except Exception:
                 pass
         
         summary += f"💳 **Payment Method:** {payment}\n\n"
@@ -876,7 +884,7 @@ async def callback_query_handler(update: Update, context: ContextTypes.DEFAULT_T
         deal_id = int(deal_id_str)
         deal = await db.get_deal(deal_id)
         if not deal:
-            await q.edit_message_text("Deal not found.")
+            await q.edit_message_text(MSG_DEAL_NOT_FOUND)
             return
 
         # Verify it's the counterparty (target)
@@ -884,8 +892,8 @@ async def callback_query_handler(update: Update, context: ContextTypes.DEFAULT_T
             try:
                 target_chat = await context.bot.get_chat(deal["target_id"])
                 target_name = f"@{target_chat.username}" if target_chat.username else target_chat.full_name
-            except:
-                target_name = "the counterparty"
+            except Exception:
+                target_name = MSG_THE_COUNTERPARTY
             await q.answer(f"⚠️ This is the COUNTERPARTY's action. Wait for {target_name} to accept the deal.", show_alert=True)
             return
         
@@ -902,12 +910,12 @@ async def callback_query_handler(update: Update, context: ContextTypes.DEFAULT_T
             
             await send_log_notification(
                 context,
-                f"✅ <b>DEAL ACCEPTED</b>\n\n"
+                "✅ <b>DEAL ACCEPTED</b>\n\n"
                 f"Deal ID: #{deal_id}\n"
                 f"Initiator: {initiator_name}\n"
                 f"Counterparty: {target_name}\n"
                 f"Amount: {deal.get('amount')} {deal.get('currency', 'USDT')}\n"
-                f"Status: Awaiting rate confirmation"
+                "Status: Awaiting rate confirmation"
             )
         except Exception as e:
             logger.error(f"Failed to send acceptance log: {e}")
@@ -923,9 +931,9 @@ async def callback_query_handler(update: Update, context: ContextTypes.DEFAULT_T
             await context.bot.send_message(
                 chat_id=deal["group_chat_id"],
                 text=(
-                    f"💱 Please type your proposed INR rate per USDT.\n\n"
-                    f"Example: Type '92' for ₹92/USDT\n\n"
-                    f"Either party can propose the rate."
+                    "💱 Please type your proposed INR rate per USDT.\n\n"
+                    "Example: Type '92' for ₹92/USDT\n\n"
+                    "Either party can propose the rate."
                 )
             )
             # Set a flag so we know we're waiting for rate
@@ -938,7 +946,7 @@ async def callback_query_handler(update: Update, context: ContextTypes.DEFAULT_T
             try:
                 seller_chat = await context.bot.get_chat(seller_id)
                 seller_name = f"@{seller_chat.username}" if seller_chat.username else (seller_chat.full_name or f"User {seller_id}")
-            except:
+            except Exception:
                 seller_name = f"User {seller_id}"
             
             # Add button for seller to submit transaction
@@ -949,10 +957,10 @@ async def callback_query_handler(update: Update, context: ContextTypes.DEFAULT_T
             await context.bot.send_message(
                 chat_id=deal["group_chat_id"],
                 text=(
-                    f"✅ Deal Confirmed!\n\n"
-                    f"Next Step:\n"
+                    "✅ Deal Confirmed!\n\n"
+                    "Next Step:\n"
                     f"Seller ({seller_name}): Click the button below to submit your transaction details.\n"
-                    f"After admin verification, buyer will send fiat payment proof."
+                    "After admin verification, buyer will send fiat payment proof."
                 ),
                 reply_markup=keyboard
             )
@@ -962,7 +970,7 @@ async def callback_query_handler(update: Update, context: ContextTypes.DEFAULT_T
         deal_id = int(deal_id_str)
         deal = await db.get_deal(deal_id)
         if not deal:
-            await q.edit_message_text("Deal not found.")
+            await q.edit_message_text(MSG_DEAL_NOT_FOUND)
             return
 
         # Verify it's the counterparty
@@ -970,8 +978,8 @@ async def callback_query_handler(update: Update, context: ContextTypes.DEFAULT_T
             try:
                 target_chat = await context.bot.get_chat(deal["target_id"])
                 target_name = f"@{target_chat.username}" if target_chat.username else target_chat.full_name
-            except:
-                target_name = "the counterparty"
+            except Exception:
+                target_name = MSG_THE_COUNTERPARTY
             await q.answer(f"⚠️ This is the COUNTERPARTY's action. Wait for {target_name} to reject or accept.", show_alert=True)
             return
         
@@ -989,7 +997,7 @@ async def callback_query_handler(update: Update, context: ContextTypes.DEFAULT_T
             
             await send_log_notification(
                 context,
-                f"❌ <b>DEAL REJECTED</b>\n\n"
+                "❌ <b>DEAL REJECTED</b>\n\n"
                 f"Deal ID: #{deal_id}\n"
                 f"Initiator: {initiator_name}\n"
                 f"Counterparty: {target_name}\n"
@@ -1015,7 +1023,7 @@ async def callback_query_handler(update: Update, context: ContextTypes.DEFAULT_T
         deal_id = int(deal_id_str)
         deal = await db.get_deal(deal_id)
         if not deal:
-            await q.edit_message_text("Deal not found.")
+            await q.edit_message_text(MSG_DEAL_NOT_FOUND)
             return
 
         # Verify it's the seller
@@ -1027,7 +1035,7 @@ async def callback_query_handler(update: Update, context: ContextTypes.DEFAULT_T
             try:
                 seller_chat = await context.bot.get_chat(seller_id)
                 seller_name = f"@{seller_chat.username}" if seller_chat.username else (seller_chat.full_name or "Seller")
-            except:
+            except Exception:
                 seller_name = "Seller"
             await q.answer(f"⚠️ This is the SELLER's action. Wait for {seller_name} to accept/reject the rate.", show_alert=True)
             return
@@ -1051,7 +1059,7 @@ async def callback_query_handler(update: Update, context: ContextTypes.DEFAULT_T
         try:
             seller_chat = await context.bot.get_chat(seller_id)
             seller_name = f"@{seller_chat.username}" if seller_chat.username else (seller_chat.full_name or f"User {seller_id}")
-        except:
+        except Exception:
             seller_name = f"User {seller_id}"
         
         keyboard = InlineKeyboardMarkup([
@@ -1061,11 +1069,11 @@ async def callback_query_handler(update: Update, context: ContextTypes.DEFAULT_T
         await context.bot.send_message(
             chat_id=deal["group_chat_id"],
             text=(
-                f"📍 **Deposit Address**\n"
+                "📍 **Deposit Address**\n"
                 f"{'='*35}\n\n"
                 f"💰 **Send exactly:** {total_usdt} USDT\n"
                 f"🌐 **Network:** {network}\n"
-                f"📍 **Address:**\n"
+                "📍 **Address:**\n"
                 f"`{admin_addr}`\n\n"
                 f"{'='*35}\n\n"
                 f"**{seller_name}, after sending, click the button below:**"
@@ -1079,7 +1087,7 @@ async def callback_query_handler(update: Update, context: ContextTypes.DEFAULT_T
         deal_id = int(deal_id_str)
         deal = await db.get_deal(deal_id)
         if not deal:
-            await q.edit_message_text("Deal not found.")
+            await q.edit_message_text(MSG_DEAL_NOT_FOUND)
             return
 
         # Verify it's the seller
@@ -1092,7 +1100,7 @@ async def callback_query_handler(update: Update, context: ContextTypes.DEFAULT_T
             try:
                 seller_chat = await context.bot.get_chat(seller_id)
                 seller_name = f"@{seller_chat.username}" if seller_chat.username else (seller_chat.full_name or "Seller")
-            except:
+            except Exception:
                 seller_name = "Seller"
             await q.answer(f"⚠️ This is the SELLER's action. Wait for {seller_name} to accept/reject the rate.", show_alert=True)
             return
@@ -1105,14 +1113,14 @@ async def callback_query_handler(update: Update, context: ContextTypes.DEFAULT_T
         try:
             buyer_chat = await context.bot.get_chat(buyer_id)
             buyer_name = f"@{buyer_chat.username}" if buyer_chat.username else (buyer_chat.full_name or f"User {buyer_id}")
-        except:
+        except Exception:
             buyer_name = f"User {buyer_id}"
         
         await context.bot.send_message(
             chat_id=deal["group_chat_id"],
             text=(
                 f"{buyer_name}, please propose a new INR rate.\n\n"
-                f"Example: Type '92' for ₹92/USDT"
+                "Example: Type '92' for ₹92/USDT"
             )
         )
 
@@ -1121,7 +1129,7 @@ async def callback_query_handler(update: Update, context: ContextTypes.DEFAULT_T
         deal_id = int(deal_id_str)
         deal = await db.get_deal(deal_id)
         if not deal:
-            await q.edit_message_text("Deal not found.")
+            await q.edit_message_text(MSG_DEAL_NOT_FOUND)
             return
 
         # Verify it's the seller
@@ -1135,7 +1143,7 @@ async def callback_query_handler(update: Update, context: ContextTypes.DEFAULT_T
             try:
                 seller_chat = await context.bot.get_chat(seller_id)
                 seller_name = f"@{seller_chat.username}" if seller_chat.username else (seller_chat.full_name or "Seller")
-            except:
+            except Exception:
                 seller_name = "Seller"
             await q.answer(f"⚠️ This is the SELLER's action. Wait for {seller_name} to submit the transaction.", show_alert=True)
             return
@@ -1153,12 +1161,12 @@ async def callback_query_handler(update: Update, context: ContextTypes.DEFAULT_T
         await context.bot.send_message(
             chat_id=deal["group_chat_id"],
             text=(
-                f"🔗 Please send the transaction explorer link.\n\n"
-                f"Example:\n"
-                f"• BSCScan: https://bscscan.com/tx/0x...\n"
-                f"• Tronscan: https://tronscan.org/#/transaction/...\n"
-                f"• Basescan: https://basescan.org/tx/0x...\n"
-                f"• Solscan: https://solscan.io/tx/..."
+                "🔗 Please send the transaction explorer link.\n\n"
+                "Example:\n"
+                "• BSCScan: https://bscscan.com/tx/0x...\n"
+                "• Tronscan: https://tronscan.org/#/transaction/...\n"
+                "• Basescan: https://basescan.org/tx/0x...\n"
+                "• Solscan: https://solscan.io/tx/..."
             )
         )
 
@@ -1167,8 +1175,8 @@ async def callback_query_handler(update: Update, context: ContextTypes.DEFAULT_T
         deal_id = int(deal_id_str)
         deal = await db.get_deal(deal_id)
         if not deal:
-            await q.answer("Deal not found.", show_alert=True)
-            await q.edit_message_text("Deal not found.")
+            await q.answer(MSG_DEAL_NOT_FOUND, show_alert=True)
+            await q.edit_message_text(MSG_DEAL_NOT_FOUND)
             return
         
         # ✅ Acknowledge callback query
@@ -1185,12 +1193,12 @@ async def callback_query_handler(update: Update, context: ContextTypes.DEFAULT_T
             
             await send_log_notification(
                 context,
-                f"❌ <b>DEAL CANCELLED</b>\n\n"
+                "❌ <b>DEAL CANCELLED</b>\n\n"
                 f"Deal ID: #{deal_id}\n"
                 f"Initiator: {initiator_name}\n"
                 f"Counterparty: {target_name}\n"
                 f"Cancelled by: {get_user_display_name(q.from_user)}\n"
-                f"Status: CANCELLED"
+                "Status: CANCELLED"
             )
         except Exception as e:
             logger.error(f"Failed to send cancellation log: {e}")
@@ -1217,7 +1225,7 @@ async def callback_query_handler(update: Update, context: ContextTypes.DEFAULT_T
         deal_id = int(data.split(":", 1)[1])
         deal = await db.get_deal(deal_id)
         if not deal:
-            await q.edit_message_text("Deal not found.")
+            await q.edit_message_text(MSG_DEAL_NOT_FOUND)
             return
 
         # verify caller is target (seller)
@@ -1225,8 +1233,8 @@ async def callback_query_handler(update: Update, context: ContextTypes.DEFAULT_T
             try:
                 seller_chat = await context.bot.get_chat(deal["target_id"])
                 seller_name = f"@{seller_chat.username}" if seller_chat.username else seller_chat.full_name
-            except:
-                seller_name = "the seller"
+            except Exception:
+                seller_name = MSG_THE_SELLER
             await q.answer(f"⚠️ This is the SELLER's action. Wait for {seller_name} to accept.", show_alert=True)
             return
         
@@ -1247,7 +1255,7 @@ async def callback_query_handler(update: Update, context: ContextTypes.DEFAULT_T
             f"💱 Currency: {deal.get('currency', 'N/A')}\n"
             f"💳 Payment: {deal.get('payment_method', 'N/A')}\n"
             f"✅ Accepted at: {accepted_time}\n\n"
-            f"**Next Step:** Seller, click below to submit payment details."
+            "**Next Step:** Seller, click below to submit payment details."
         )
         
         # send instructions and "Send Payment" button
@@ -1258,15 +1266,15 @@ async def callback_query_handler(update: Update, context: ContextTypes.DEFAULT_T
         deal_id = int(data.split(":", 1)[1])
         deal = await db.get_deal(deal_id)
         if not deal:
-            await q.edit_message_text("Deal not found.")
+            await q.edit_message_text(MSG_DEAL_NOT_FOUND)
             return
 
         if q.from_user.id != deal["target_id"]:
             try:
                 seller_chat = await context.bot.get_chat(deal["target_id"])
                 seller_name = f"@{seller_chat.username}" if seller_chat.username else seller_chat.full_name
-            except:
-                seller_name = "the seller"
+            except Exception:
+                seller_name = MSG_THE_SELLER
             await q.answer(f"⚠️ This is the SELLER's action. Wait for {seller_name} to reject or accept.", show_alert=True)
             return
         
@@ -1291,15 +1299,15 @@ async def callback_query_handler(update: Update, context: ContextTypes.DEFAULT_T
         deal_id = int(data.split(":", 1)[1])
         deal = await db.get_deal(deal_id)
         if not deal:
-            await q.edit_message_text("Deal not found.")
+            await q.edit_message_text(MSG_DEAL_NOT_FOUND)
             return
 
         if q.from_user.id != deal["target_id"]:
             try:
                 seller_chat = await context.bot.get_chat(deal["target_id"])
                 seller_name = f"@{seller_chat.username}" if seller_chat.username else seller_chat.full_name
-            except:
-                seller_name = "the seller"
+            except Exception:
+                seller_name = MSG_THE_SELLER
             await q.answer(f"⚠️ This is the SELLER's action. Wait for {seller_name} to submit payment.", show_alert=True)
             return
         
@@ -1310,14 +1318,14 @@ async def callback_query_handler(update: Update, context: ContextTypes.DEFAULT_T
         payment_msg = (
             f"💰 **Payment Instructions - Deal #{deal_id}**\n"
             f"{'='*35}\n\n"
-            f"📋 **Deal Summary:**\n"
+            "📋 **Deal Summary:**\n"
             f"• Amount: {deal.get('amount', 'N/A')}\n"
             f"• Currency: {deal.get('currency', 'N/A')}\n"
             f"• Payment: {deal.get('payment_method', 'N/A')}\n\n"
-            f"💳 **Send USDT to:**\n"
+            "💳 **Send USDT to:**\n"
             f"`{USDT_ADDRESS}`\n\n"
             f"{'='*35}\n"
-            f"**After sending, click the button above to submit transaction details.**"
+            "**After sending, click the button above to submit transaction details.**"
         )
         
         await q.edit_message_text(payment_msg, parse_mode="Markdown")
@@ -1326,7 +1334,7 @@ async def callback_query_handler(update: Update, context: ContextTypes.DEFAULT_T
         deal_id = int(data.split(":", 1)[1])
         deal = await db.get_deal(deal_id)
         if not deal:
-            await q.edit_message_text("Deal not found.")
+            await q.edit_message_text(MSG_DEAL_NOT_FOUND)
             return
 
         if q.from_user.id not in ADMIN_IDS:
@@ -1341,13 +1349,13 @@ async def callback_query_handler(update: Update, context: ContextTypes.DEFAULT_T
         try:
             await send_log_notification(
                 context,
-                f"✅ <b>TX VERIFIED BY ADMIN</b>\n\n"
+                "✅ <b>TX VERIFIED BY ADMIN</b>\n\n"
                 f"Deal ID: #{deal_id}\n"
                 f"Admin: {get_user_display_name(q.from_user)}\n"
                 f"TX Hash: {deal.get('tx_hash', 'N/A')}\n"
                 f"Amount: {deal.get('amount')} {deal.get('currency', 'USDT')}\n"
                 f"Network: {deal.get('network', 'N/A')}\n"
-                f"Status: Verified - Awaiting fiat payment"
+                "Status: Verified - Awaiting fiat payment"
             )
         except Exception as e:
             logger.error(f"Failed to send verification log: {e}")
@@ -1358,19 +1366,19 @@ async def callback_query_handler(update: Update, context: ContextTypes.DEFAULT_T
         try:
             buyer_chat = await context.bot.get_chat(buyer_id)
             buyer_name = f"@{buyer_chat.username}" if buyer_chat.username else (buyer_chat.full_name or f"User {buyer_id}")
-        except:
+        except Exception:
             buyer_name = f"User {buyer_id}"
         
         # Notify about USDT verification and ask buyer to send fiat + proof
         await q.edit_message_text(
-            f"✅ **USDT Payment Verified by Admin!**\n\n"
+            "✅ **USDT Payment Verified by Admin!**\n\n"
             f"{buyer_name} (Buyer):\n"
-            f"1. Send INR/fiat payment to seller\n"
-            f"2. Upload payment screenshot/proof as image\n"
-            f"3. Click 'Sent Fiat' button below\n\n"
-            f"⚠️ Make sure to send proof before clicking!",
+            "1. Send INR/fiat payment to seller\n"
+            "2. Upload payment screenshot/proof as image\n"
+            "3. Click 'Sent Fiat' button below\n\n"
+            "⚠️ Make sure to send proof before clicking!",
             reply_markup=InlineKeyboardMarkup([[
-                InlineKeyboardButton("✅ I've Sent Fiat + Proof", callback_data=f"fiat_sent:{deal_id}")
+                InlineKeyboardButton("✅ I've Sent Fiat + Proo", callback_data=f"fiat_sent:{deal_id}")
             ]]),
             parse_mode="Markdown"
         )
@@ -1379,7 +1387,7 @@ async def callback_query_handler(update: Update, context: ContextTypes.DEFAULT_T
         deal_id = int(data.split(":", 1)[1])
         deal = await db.get_deal(deal_id)
         if not deal:
-            await q.edit_message_text("Deal not found.")
+            await q.edit_message_text(MSG_DEAL_NOT_FOUND)
             return
 
         # Verify caller is buyer
@@ -1388,8 +1396,8 @@ async def callback_query_handler(update: Update, context: ContextTypes.DEFAULT_T
             try:
                 buyer_chat = await context.bot.get_chat(buyer_id)
                 buyer_name = f"@{buyer_chat.username}" if buyer_chat.username else buyer_chat.full_name
-            except:
-                buyer_name = "the buyer"
+            except Exception:
+                buyer_name = MSG_THE_BUYER
             await q.answer(f"⚠️ This is the BUYER's action. Wait for {buyer_name} to confirm fiat sent.", show_alert=True)
             return
         
@@ -1404,20 +1412,20 @@ async def callback_query_handler(update: Update, context: ContextTypes.DEFAULT_T
             
             await send_log_notification(
                 context,
-                f"💰 <b>FIAT SENT BY BUYER</b>\n\n"
+                "💰 <b>FIAT SENT BY BUYER</b>\n\n"
                 f"Deal ID: #{deal_id}\n"
                 f"Buyer: {buyer_name}\n"
                 f"Amount: {deal.get('amount')} {deal.get('currency', 'USDT')}\n"
                 f"Payment Method: {deal.get('payment_method', 'N/A')}\n"
-                f"Status: Awaiting seller confirmation"
+                "Status: Awaiting seller confirmation"
             )
         except Exception as e:
             logger.error(f"Failed to send fiat sent log: {e}")
         
         # Ask seller to confirm
         await q.edit_message_text(
-            f"✅ **Buyer sent fiat**\n\n"
-            f"Seller, click below when you receive the fiat payment.",
+            "✅ **Buyer sent fiat**\n\n"
+            "Seller, click below when you receive the fiat payment.",
             reply_markup=InlineKeyboardMarkup([[
                 InlineKeyboardButton("✅ Fiat Received", callback_data=f"fiat_received:{deal_id}")
             ]]),
@@ -1428,7 +1436,7 @@ async def callback_query_handler(update: Update, context: ContextTypes.DEFAULT_T
         deal_id = int(data.split(":", 1)[1])
         deal = await db.get_deal(deal_id)
         if not deal:
-            await q.edit_message_text("Deal not found.")
+            await q.edit_message_text(MSG_DEAL_NOT_FOUND)
             return
 
         # Verify caller is seller
@@ -1437,8 +1445,8 @@ async def callback_query_handler(update: Update, context: ContextTypes.DEFAULT_T
             try:
                 seller_chat = await context.bot.get_chat(seller_id)
                 seller_name = f"@{seller_chat.username}" if seller_chat.username else seller_chat.full_name
-            except:
-                seller_name = "the seller"
+            except Exception:
+                seller_name = MSG_THE_SELLER
             await q.answer(f"⚠️ This is the SELLER's action. Wait for {seller_name} to confirm fiat received.", show_alert=True)
             return
         
@@ -1453,21 +1461,21 @@ async def callback_query_handler(update: Update, context: ContextTypes.DEFAULT_T
             
             await send_log_notification(
                 context,
-                f"💵 <b>FIAT RECEIVED BY SELLER</b>\n\n"
+                "💵 <b>FIAT RECEIVED BY SELLER</b>\n\n"
                 f"Deal ID: #{deal_id}\n"
                 f"Seller: {seller_name}\n"
                 f"Amount: {deal.get('amount')} {deal.get('currency', 'USDT')}\n"
                 f"Payment Method: {deal.get('payment_method', 'N/A')}\n"
-                f"Status: Awaiting both parties to mark complete"
+                "Status: Awaiting both parties to mark complete"
             )
         except Exception as e:
             logger.error(f"Failed to send fiat received log: {e}")
         
         # Now show completion buttons for BOTH parties
         await q.edit_message_text(
-            f"✅ **Seller confirmed fiat received!**\n\n"
-            f"📌 Admin will release USDT soon.\n"
-            f"Both parties click below when satisfied:",
+            "✅ **Seller confirmed fiat received!**\n\n"
+            "📌 Admin will release USDT soon.\n"
+            "Both parties click below when satisfied:",
             parse_mode="Markdown"
         )
         
@@ -1493,7 +1501,7 @@ async def callback_query_handler(update: Update, context: ContextTypes.DEFAULT_T
         deal_id = int(deal_id_str)
         deal = await db.get_deal(deal_id)
         if not deal:
-            await q.edit_message_text("Deal not found.")
+            await q.edit_message_text(MSG_DEAL_NOT_FOUND)
             return
 
         # Determine who is buyer and seller
@@ -1506,8 +1514,8 @@ async def callback_query_handler(update: Update, context: ContextTypes.DEFAULT_T
                 try:
                     buyer_chat = await context.bot.get_chat(buyer_id)
                     buyer_name = f"@{buyer_chat.username}" if buyer_chat.username else buyer_chat.full_name
-                except:
-                    buyer_name = "the buyer"
+                except Exception:
+                    buyer_name = MSG_THE_BUYER
                 await q.answer(f"⚠️ This is the BUYER's button. Wait for {buyer_name} to complete.", show_alert=True)
                 return
             # ✅ Acknowledge callback query
@@ -1522,8 +1530,8 @@ async def callback_query_handler(update: Update, context: ContextTypes.DEFAULT_T
                 try:
                     seller_chat = await context.bot.get_chat(seller_id)
                     seller_name = f"@{seller_chat.username}" if seller_chat.username else seller_chat.full_name
-                except:
-                    seller_name = "the seller"
+                except Exception:
+                    seller_name = MSG_THE_SELLER
                 await q.answer(f"⚠️ This is the SELLER's button. Wait for {seller_name} to complete.", show_alert=True)
                 return
             # ✅ Acknowledge callback query
@@ -1548,7 +1556,7 @@ async def callback_query_handler(update: Update, context: ContextTypes.DEFAULT_T
                 target_chat = await context.bot.get_chat(deal["target_id"])
                 initiator_name = f"@{initiator_chat.username}" if initiator_chat.username else (initiator_chat.full_name or f"User {deal['initiator_id']}")
                 target_name = f"@{target_chat.username}" if target_chat.username else (target_chat.full_name or f"User {deal['target_id']}")
-            except:
+            except Exception:
                 initiator_name = f"User {deal['initiator_id']}"
                 target_name = f"User {deal['target_id']}"
             
@@ -1557,10 +1565,10 @@ async def callback_query_handler(update: Update, context: ContextTypes.DEFAULT_T
                 chat_id=deal["group_chat_id"],
                 text=(
                     f"🎉 **Deal #{deal_id} Completed!**\n\n"
-                    f"Both parties confirmed completion.\n"
-                    f"Thank you for using our service!\n\n"
-                    f"━━━━━━━━━━━━━━━━━\n"
-                    f"🤖 Bot by @killerbesto"
+                    "Both parties confirmed completion.\n"
+                    "Thank you for using our service!\n\n"
+                    "━━━━━━━━━━━━━━━━━\n"
+                    f"{BOT_SIGNATURE}"
                 ),
                 parse_mode="Markdown"
             )
@@ -1579,7 +1587,7 @@ async def callback_query_handler(update: Update, context: ContextTypes.DEFAULT_T
             try:
                 await send_log_notification(
                     context,
-                    f"🎉 <b>DEAL COMPLETED</b>\n\n"
+                    "🎉 <b>DEAL COMPLETED</b>\n\n"
                     f"Deal ID: #{deal_id}\n"
                     f"Initiator: {initiator_name}\n"
                     f"Counterparty: {target_name}\n"
@@ -1587,8 +1595,8 @@ async def callback_query_handler(update: Update, context: ContextTypes.DEFAULT_T
                     f"Payment Method: {deal.get('payment_method', 'N/A')}\n"
                     f"Network: {deal.get('network', 'N/A')}\n"
                     f"INR Rate: ₹{deal.get('inr_rate', 'N/A')}/USDT\n"
-                    f"Status: ✅ COMPLETED\n\n"
-                    f"Both parties confirmed completion."
+                    "Status: ✅ COMPLETED\n\n"
+                    "Both parties confirmed completion."
                 )
             except Exception as e:
                 logger.error(f"Failed to send completion log: {e}")
@@ -1600,7 +1608,7 @@ async def callback_query_handler(update: Update, context: ContextTypes.DEFAULT_T
                         chat_id=deal["group_chat_id"],
                         text="✅ Deal completed! Please leave the room manually. Thank you!"
                     )
-                except:
+                except Exception:
                     pass
                 
                 await db.release_group(deal["group_chat_id"])
@@ -1609,7 +1617,7 @@ async def callback_query_handler(update: Update, context: ContextTypes.DEFAULT_T
         deal_id = int(data.split(":", 1)[1])
         deal = await db.get_deal(deal_id)
         if not deal:
-            await q.edit_message_text("Deal not found.")
+            await q.edit_message_text(MSG_DEAL_NOT_FOUND)
             return
 
         if q.from_user.id not in ADMIN_IDS:
@@ -1628,15 +1636,15 @@ async def callback_query_handler(update: Update, context: ContextTypes.DEFAULT_T
         deal_id = int(data.split(":", 1)[1])
         deal = await db.get_deal(deal_id)
         if not deal:
-            await q.edit_message_text("Deal not found.")
+            await q.edit_message_text(MSG_DEAL_NOT_FOUND)
             return
 
         if q.from_user.id != deal["initiator_id"]:
             try:
                 buyer_chat = await context.bot.get_chat(deal["initiator_id"])
                 buyer_name = f"@{buyer_chat.username}" if buyer_chat.username else buyer_chat.full_name
-            except:
-                buyer_name = "the buyer"
+            except Exception:
+                buyer_name = MSG_THE_BUYER
             await q.answer(f"⚠️ This is the BUYER's action. Wait for {buyer_name} to send fiat.", show_alert=True)
             return
         
@@ -1653,7 +1661,7 @@ async def callback_query_handler(update: Update, context: ContextTypes.DEFAULT_T
         deal_id = int(data.split(":", 1)[1])
         deal = await db.get_deal(deal_id)
         if not deal:
-            await q.edit_message_text("Deal not found.")
+            await q.edit_message_text(MSG_DEAL_NOT_FOUND)
             return
 
         if q.from_user.id != deal["target_id"]:
@@ -1673,7 +1681,7 @@ async def callback_query_handler(update: Update, context: ContextTypes.DEFAULT_T
         deal_id = int(data.split(":", 1)[1])
         deal = await db.get_deal(deal_id)
         if not deal:
-            await q.edit_message_text("Deal not found.")
+            await q.edit_message_text(MSG_DEAL_NOT_FOUND)
             return
 
         if q.from_user.id not in ADMIN_IDS:
@@ -1717,7 +1725,7 @@ async def deal_status(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
         deal_id = int(context.args[0])
         deal = await db.get_deal(deal_id)
         if not deal:
-            await msg.reply_text("Deal not found.")
+            await msg.reply_text(MSG_DEAL_NOT_FOUND)
             return
         await msg.reply_text(str(deal))
         return

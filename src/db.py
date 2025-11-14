@@ -69,7 +69,7 @@ async def init_db(path: str = DB_PATH) -> None:
 
 
 async def add_group_to_pool(chat_id: int, name: str = "", path: str = DB_PATH) -> None:
-    created_at = datetime.datetime.utcnow().isoformat()
+    created_at = datetime.datetime.now(datetime.timezone.utc).isoformat()
     async with aiosqlite.connect(path) as db:
         # Use INSERT OR REPLACE to reset group status if already exists
         await db.execute(
@@ -113,7 +113,7 @@ async def create_deal(
     invite_link: Optional[str] = None,
     path: str = DB_PATH
 ) -> int:
-    created_at = datetime.datetime.utcnow().isoformat()
+    created_at = datetime.datetime.now(datetime.timezone.utc).isoformat()
     # determine target role (opposite of initiator)
     target_role = "seller" if initiator_role == "buyer" else "buyer" if initiator_role == "seller" else None
     
@@ -144,7 +144,7 @@ async def get_active_deal_for_user(user_id: int, path: str = DB_PATH) -> Optiona
 
 async def update_deal_status(deal_id: int, status: str, path: str = DB_PATH) -> None:
     ts_field = None
-    ts = datetime.datetime.utcnow().isoformat()
+    ts = datetime.datetime.now(datetime.timezone.utc).isoformat()
     if status == "accepted":
         ts_field = "accepted_at"
     elif status == "paid":

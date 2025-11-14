@@ -19,6 +19,8 @@ from telegram.ext import (
     filters,
 )
 
+from .bot import BOT_SIGNATURE
+
 logger = logging.getLogger(__name__)
 
 # Conversation states
@@ -60,7 +62,7 @@ async def deal_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
                     user_chat = await context.bot.get_chat(username)
                     counterparty_id = user_chat.id
                     counterparty_name = f"@{user_chat.username}" if user_chat.username else user_chat.full_name
-                except:
+                except Exception:
                     pass
                 break
     
@@ -126,9 +128,9 @@ async def deal_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
         f"👤 Initiator: {initiator_display}\n"
         f"👤 Counterparty: {counterparty_display}\n\n"
         f"🔗 Private Deal Room:\n{invite_link}\n\n"
-        f"⚠️ Click the link to join. Only authorized participants can join.\n\n"
-        f"━━━━━━━━━━━━━━━━━\n"
-        f"🤖 Bot by @killerbesto"
+        "⚠️ Click the link to join. Only authorized participants can join.\n\n"
+        "━━━━━━━━━━━━━━━━━\n"
+        f"{BOT_SIGNATURE}"
     )
     
     await msg.reply_text(reply_text)  # Removed parse_mode="Markdown"
@@ -136,11 +138,11 @@ async def deal_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     # Send notification to logs group
     await bot.send_log_notification(
         context,
-        f"📝 <b>NEW DEAL CREATED</b>\n\n"
+        "📝 <b>NEW DEAL CREATED</b>\n\n"
         f"Deal ID: #{deal_id}\n"
         f"Initiator: {initiator_display}\n"
         f"Counterparty: {counterparty_display}\n"
-        f"Status: Pending (waiting to join room)\n\n"
+        "Status: Pending (waiting to join room)\n\n"
         f"🔗 <a href='{invite_link}'>Deal Room</a>"
     )
     
@@ -169,7 +171,7 @@ async def role_selected(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
     role_emoji = "🛒" if role == "buyer" else "💰"
     await query.edit_message_text(
         f"{role_emoji} You're the {role.upper()}.\n\n"
-        f"What currency are you dealing in?",
+        "What currency are you dealing in?",
         reply_markup=keyboard
     )
     return CURRENCY
@@ -190,7 +192,7 @@ async def currency_selected(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     currency_symbol = "USDT" if currency == "crypto" else "INR"
     await query.edit_message_text(
         f"✅ Currency: {currency_symbol}\n\n"
-        f"Now, enter the amount (just the number, e.g., 1000 or 50000):"
+        "Now, enter the amount (just the number, e.g., 1000 or 50000):"
     )
     return AMOUNT
 
@@ -222,7 +224,6 @@ async def amount_entered(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         keyboard_buttons.append(row)
     
     keyboard_buttons.append([InlineKeyboardButton("❌ Cancel", callback_data="cancel")])
-    keyboard = InlineKeyboardMarkup(keyboard_buttons)
     
     amount = context.user_data["amount"]
     currency = context.user_data.get("currency", "Crypto")
@@ -231,7 +232,7 @@ async def amount_entered(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     if currency == "INR":
         await update.message.reply_text(
             f"✅ Amount: {amount} INR\n\n"
-            f"Now, enter the INR to USDT rate (e.g., 90.5):"
+            "Now, enter the INR to USDT rate (e.g., 90.5):"
         )
         return INR_RATE
     
@@ -253,7 +254,7 @@ async def amount_entered(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     
     await update.message.reply_text(
         f"✅ Amount: {amount}\n\n"
-        f"Select payment method:",
+        "Select payment method:",
         reply_markup=keyboard
     )
     return PAYMENT_METHOD
@@ -293,7 +294,7 @@ async def inr_rate_entered(update: Update, context: ContextTypes.DEFAULT_TYPE) -
     
     await update.message.reply_text(
         f"✅ INR Rate: {rate_text}\n\n"
-        f"Select payment method:",
+        "Select payment method:",
         reply_markup=keyboard
     )
     return PAYMENT_METHOD
@@ -318,7 +319,7 @@ async def payment_method_selected(update: Update, context: ContextTypes.DEFAULT_
     
     await query.edit_message_text(
         f"✅ Payment method: {payment_method}\n\n"
-        f"Now, enter the counterparty username (with or without @):"
+        "Now, enter the counterparty username (with or without @):"
     )
     return COUNTERPARTY
 
@@ -340,7 +341,7 @@ async def show_confirmation(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     ])
     
     summary = (
-        f"📋 **Deal Summary**\n\n"
+        "📋 **Deal Summary**\n\n"
         f"Your role: {role.upper()}\n"
         f"Currency: {currency}\n"
         f"Amount: {amount}\n"
@@ -352,7 +353,7 @@ async def show_confirmation(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     summary += (
         f"Payment method: {payment_method}\n"
         f"{counterparty_role}: {counterparty}\n\n"
-        f"Confirm to create the deal?"
+        "Confirm to create the deal?"
     )
     
     # Check if this is from callback query or message
@@ -415,7 +416,7 @@ async def deal_confirmed(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         logger.exception("Failed to resolve counterparty: %s", e)
         await query.edit_message_text(
             f"❌ Couldn't find user '{counterparty}'.\n\n"
-            f"Make sure they have a public @username or have started the bot."
+            "Make sure they have a public @username or have started the bot."
         )
         return ConversationHandler.END
     
@@ -425,8 +426,8 @@ async def deal_confirmed(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     free_group = await db.get_free_group()
     if not free_group:
         await query.edit_message_text(
-            f"❌ No deal rooms available right now.\n"
-            f"Admin can check status with /list_groups"
+            "❌ No deal rooms available right now.\n"
+            "Admin can check status with /list_groups"
         )
         return ConversationHandler.END
     
@@ -514,7 +515,7 @@ async def deal_confirmed(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
                     f"💰 Amount: {amount}\n"
                     f"💳 Payment: {payment_method}\n\n"
                     f"🔗 Private Deal Room:\n{invite_link}\n\n"
-                    f"⚠️ Only authorized participants can join."
+                    "⚠️ Only authorized participants can join."
                 ),
                 parse_mode="Markdown"
             )

@@ -78,7 +78,7 @@ async def submit_tx_start(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     
     await msg.reply_text(
         f"💳 **Transaction Submission - Deal #{deal_id}**\n\n"
-        f"Step 1/4: Enter the transaction hash (TX Hash):",
+        "Step 1/4: Enter the transaction hash (TX Hash):",
         parse_mode="Markdown"
     )
     return TX_HASH
@@ -91,7 +91,7 @@ async def tx_hash_entered(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     
     await update.message.reply_text(
         f"✅ TX Hash: `{tx_hash}`\n\n"
-        f"Step 2/4: Enter the blockchain explorer link (optional - send 'skip' to skip):",
+        "Step 2/4: Enter the blockchain explorer link (optional - send 'skip' to skip):",
         parse_mode="Markdown"
     )
     return TX_LINK
@@ -110,7 +110,7 @@ async def tx_link_entered(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     
     await update.message.reply_text(
         f"✅ Explorer Link: {link_display}\n\n"
-        f"Step 3/4: Enter the amount sent (numbers only):",
+        "Step 3/4: Enter the amount sent (numbers only):",
         parse_mode="Markdown"
     )
     return TX_AMOUNT
@@ -150,7 +150,7 @@ async def tx_amount_entered(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     
     await update.message.reply_text(
         f"✅ Amount: {amount_text}\n\n"
-        f"Step 4/4: Select the currency/network:",
+        "Step 4/4: Select the currency/network:",
         reply_markup=keyboard,
         parse_mode="Markdown"
     )
@@ -189,7 +189,7 @@ async def tx_currency_selected(update: Update, context: ContextTypes.DEFAULT_TYP
     
     # Format confirmation message
     confirmation = (
-        f"✅ **Transaction Submitted!**\n"
+        "✅ **Transaction Submitted!**\n"
         f"{'='*35}\n\n"
         f"📋 **Deal ID:** #{deal_id}\n"
         f"🔑 **TX Hash:** `{tx_hash}`\n"
@@ -202,7 +202,7 @@ async def tx_currency_selected(update: Update, context: ContextTypes.DEFAULT_TYP
         f"💰 **Amount:** {tx_amount}\n"
         f"💱 **Currency:** {currency}\n\n"
         f"{'='*35}\n"
-        f"⏳ Waiting for admin verification..."
+        "⏳ Waiting for admin verification..."
     )
     
     await query.edit_message_text(confirmation, parse_mode="Markdown")
@@ -221,7 +221,7 @@ async def tx_currency_selected(update: Update, context: ContextTypes.DEFAULT_TYP
         group_msg += (
             f"💰 Amount: {tx_amount} {currency}\n\n"
             f"{'='*35}\n"
-            f"⚠️ **Admin: Please verify this transaction**"
+            "⚠️ **Admin: Please verify this transaction**"
         )
         
         keyboard = InlineKeyboardMarkup([
