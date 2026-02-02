@@ -36,6 +36,7 @@ CREATE TABLE IF NOT EXISTS deals (
     deposit_amount TEXT,
     deposit_network TEXT,
     invite_link TEXT,
+    main_group_msg_id INTEGER,
     confirm_initiator INTEGER DEFAULT 0,
     confirm_target INTEGER DEFAULT 0,
     completed_initiator INTEGER DEFAULT 0,
@@ -60,12 +61,66 @@ CREATE TABLE IF NOT EXISTS groups (
 );
 """
 
+CREATE_ACTIVITY_LOG_SQL = """
+CREATE TABLE IF NOT EXISTS activity_logs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    action_type TEXT NOT NULL,
+    deal_id INTEGER,
+    details TEXT,
+    created_at TEXT NOT NULL,
+    ip_address TEXT
+);
+"""
+
+CREATE_USER_CACHE_SQL = """
+CREATE TABLE IF NOT EXISTS user_cache (
+    user_id INTEGER PRIMARY KEY,
+    username TEXT,
+    full_name TEXT,
+    first_name TEXT,
+    last_deal_created_at TEXT,
+    last_deal_cancelled_at TEXT,
+    last_role_switch_at TEXT,
+    deal_count INTEGER DEFAULT 0,
+    cancel_count INTEGER DEFAULT 0,
+    updated_at TEXT NOT NULL
+);
+"""
+
+CREATE_INDEXES_SQL = [
+    "CREATE INDEX IF NOT EXISTS idx_deals_initiator ON deals(initiator_id);",
+    "CREATE INDEX IF NOT EXISTS idx_deals_target ON deals(target_id);",
+    "CREATE INDEX IF NOT EXISTS idx_deals_status ON deals(status);",
+    "CREATE INDEX IF NOT EXISTS idx_deals_created_at ON deals(created_at);",
+    "CREATE INDEX IF NOT EXISTS idx_deals_group_chat ON deals(group_chat_id);",
+    "CREATE INDEX IF NOT EXISTS idx_activity_logs_user ON activity_logs(user_id);",
+    "CREATE INDEX IF NOT EXISTS idx_activity_logs_action ON activity_logs(action_type);",
+    "CREATE INDEX IF NOT EXISTS idx_activity_logs_created ON activity_logs(created_at);",
+]
+
 
 async def init_db(path: str = DB_PATH) -> None:
     async with aiosqlite.connect(path) as db:
         await db.execute(CREATE_TABLE_SQL)
         await db.execute(CREATE_GROUPS_TABLE_SQL)
+        await db.execute(CREATE_ACTIVITY_LOG_SQL)
+        await db.execute(CREATE_USER_CACHE_SQL)
+        
+        # Create indexes for query optimization
+        for index_sql in CREATE_INDEXES_SQL:
+            await db.execute(index_sql)
+        
         await db.commit()
+        
+        # Migrate existing databases to add main_group_msg_id column if missing
+        cursor = await db.execute("PRAGMA table_info(deals)")
+        columns = [column[1] for column in await cursor.fetchall()]
+        
+        if "main_group_msg_id" not in columns:
+            await db.execute("ALTER TABLE deals ADD COLUMN main_group_msg_id INTEGER")
+            await db.commit()
+            print("✅ Migrated database: Added main_group_msg_id column")
 
 
 async def add_group_to_pool(chat_id: int, name: str = "", path: str = DB_PATH) -> None:
@@ -111,6 +166,7 @@ async def create_deal(
     usdt_address: Optional[str] = None,
     fee: Optional[str] = None,
     invite_link: Optional[str] = None,
+    main_group_msg_id: Optional[int] = None,
     path: str = DB_PATH
 ) -> int:
     created_at = datetime.datetime.now(datetime.timezone.utc).isoformat()
@@ -119,8 +175,8 @@ async def create_deal(
     
     async with aiosqlite.connect(path) as db:
         cur = await db.execute(
-            "INSERT INTO deals (initiator_id, initiator_role, target_id, target_role, amount, currency, inr_rate, payment_method, status, group_chat_id, usdt_address, fee, invite_link, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-            (initiator_id, initiator_role, target_id, target_role, amount, currency, inr_rate, payment_method, "pending", group_chat_id, usdt_address, fee, invite_link, created_at),
+            "INSERT INTO deals (initiator_id, initiator_role, target_id, target_role, amount, currency, inr_rate, payment_method, status, group_chat_id, usdt_address, fee, invite_link, main_group_msg_id, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (initiator_id, initiator_role, target_id, target_role, amount, currency, inr_rate, payment_method, "pending", group_chat_id, usdt_address, fee, invite_link, main_group_msg_id, created_at),
         )
         await db.commit()
         return cur.lastrowid

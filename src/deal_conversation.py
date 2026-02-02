@@ -29,10 +29,28 @@ ROLE, CURRENCY, AMOUNT, INR_RATE, PAYMENT_METHOD, COUNTERPARTY, CONFIRM = range(
 
 async def deal_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Start the deal creation flow - assign room and send invite link."""
-    from . import bot, db
+    from . import bot, db, security
     
     msg = update.message
     initiator_id = msg.from_user.id
+    
+    # ✅ RATE LIMITING: Check if user can create a deal
+    allowed, reason = await security.check_rate_limit_deal_creation(initiator_id)
+    if not allowed:
+        await msg.reply_text(reason)
+        return ConversationHandler.END
+    
+    # ✅ SECURITY: Log deal creation attempt
+    await security.log_activity(initiator_id, "DEAL_CREATION_STARTED")
+    
+    # ✅ SECURITY: Check for suspicious activity
+    suspicious = await security.detect_suspicious_activity(initiator_id)
+    if suspicious:
+        # Log to admins but don't block user yet
+        await bot.send_log_notification(
+            context,
+            f"🚨 <b>SECURITY ALERT</b>\n\n{suspicious}\nUser ID: {initiator_id}"
+        )
     
     # Check if user tagged someone in the message
     counterparty_id = None
@@ -86,12 +104,12 @@ async def deal_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     
     group_chat_id = free_group["chat_id"]
     
-    # Create invite link (no expiration, unlimited uses)
+    # Create invite link with join request approval
     try:
         invite_link_obj = await context.bot.create_chat_invite_link(
             chat_id=group_chat_id,
+            creates_join_request=True,  # Requires approval - bot auto-approves only participants
             name=f"Deal {initiator_id}-{counterparty_id}",
-            # No member_limit or creates_join_request for maximum compatibility
         )
         invite_link = invite_link_obj.invite_link
     except Exception as e:
@@ -113,6 +131,12 @@ async def deal_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
         invite_link=invite_link,
     )
     
+    # ✅ RATE LIMITING: Update user cache after successful deal creation
+    await security.update_user_cache_deal_created(initiator_id)
+    
+    # ✅ SECURITY: Log successful deal creation
+    await security.log_activity(initiator_id, "DEAL_CREATED", deal_id, f"With user {counterparty_id}")
+    
     # Format counterparty display name
     # Format initiator display name (prioritize username)
     initiator_display = f"@{msg.from_user.username}" if msg.from_user.username else msg.from_user.full_name
@@ -133,7 +157,13 @@ async def deal_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
         f"{BOT_SIGNATURE}"
     )
     
-    await msg.reply_text(reply_text)  # Removed parse_mode="Markdown"
+    invite_msg = await msg.reply_text(reply_text)  # Store message to delete later
+    
+    # Store invite message ID in context for deletion when users join
+    context.bot_data[f"invite_msg_{deal_id}"] = {
+        "chat_id": msg.chat_id,
+        "message_id": invite_msg.message_id
+    }
     
     # Send notification to logs group
     await bot.send_log_notification(
@@ -433,12 +463,12 @@ async def deal_confirmed(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     
     group_chat_id = free_group["chat_id"]
     
-    # Create invite link (no expiration, unlimited uses)
+    # Create invite link with join request approval
     try:
         invite_link_obj = await context.bot.create_chat_invite_link(
             chat_id=group_chat_id,
+            creates_join_request=True,  # Requires approval - bot auto-approves only participants
             name=f"Deal {initiator_id}-{target_id}",
-            # No member_limit or creates_join_request for maximum compatibility
         )
         invite_link = invite_link_obj.invite_link
     except Exception as e:

@@ -26,6 +26,7 @@ from telegram.ext import (
 from telegram.error import TelegramError
 
 from . import db
+from . import security
 
 load_dotenv()
 
@@ -78,6 +79,89 @@ def get_user_display_name(chat):
     if chat.username:
         return f"@{chat.username}"
     return chat.full_name or chat.first_name or f"User {chat.id}"
+
+
+async def get_cached_user_name(context: ContextTypes.DEFAULT_TYPE, user_id: int) -> str:
+    """
+    Get user display name with caching to reduce API calls.
+    Returns cached name if available and fresh, otherwise fetches from API and caches.
+    """
+    # Try to get from cache first
+    cached = await security.get_cached_user_display(user_id)
+    if cached:
+        username = cached.get("username")
+        if username:
+            return f"@{username}"
+        full_name = cached.get("full_name")
+        first_name = cached.get("first_name")
+        return full_name or first_name or f"User {user_id}"
+    
+    # Cache miss or stale - fetch from API
+    try:
+        chat = await context.bot.get_chat(user_id)
+        display_name = get_user_display_name(chat)
+        
+        # Update cache asynchronously (fire and forget)
+        asyncio.create_task(
+            security.update_user_display_cache(
+                user_id,
+                chat.username,
+                chat.full_name,
+                chat.first_name
+            )
+        )
+        
+        return display_name
+    except Exception:
+        return f"User {user_id}"
+
+
+async def update_main_group_deal_status(context: ContextTypes.DEFAULT_TYPE, deal_id: int, status: str) -> None:
+    """Update or delete deal status message in main group."""
+    deal = await db.get_deal(deal_id)
+    if not deal or not MAIN_GROUP_ID or not deal.get("main_group_msg_id"):
+        return
+    
+    try:
+        # If cancelled, delete the message
+        if status == "cancelled":
+            await context.bot.delete_message(
+                chat_id=MAIN_GROUP_ID,
+                message_id=deal["main_group_msg_id"]
+            )
+            logger.info(f"Deleted main group message for cancelled deal #{deal_id}")
+            return
+        
+        # Otherwise, update with current status
+        initiator_chat = await context.bot.get_chat(deal["initiator_id"])
+        target_chat = await context.bot.get_chat(deal["target_id"])
+        initiator_name = get_user_display_name(initiator_chat)
+        target_name = get_user_display_name(target_chat)
+        
+        status_emoji = {
+            "pending": "⏳",
+            "accepted": "✅",
+            "confirmed": "🤝",
+            "verified": "🔍",
+            "paid": "💰",
+            "fiat_sent": "📤",
+            "fiat_received": "📥",
+            "released": "🎉",
+            "closed": "✅",
+            "rejected": "❌"
+        }
+        
+        emoji = status_emoji.get(status, "🔄")
+        status_text = status.replace("_", " ").title()
+        
+        await context.bot.edit_message_text(
+            chat_id=MAIN_GROUP_ID,
+            message_id=deal["main_group_msg_id"],
+            text=f"{emoji} Deal #{deal_id} - {status_text}\n\n👤 {initiator_name}\n👤 {target_name}"
+        )
+        logger.info(f"Updated main group message for deal #{deal_id} - status: {status}")
+    except Exception as e:
+        logger.exception(f"Failed to update main group message: {e}")
 
 
 # Network-specific addresses
@@ -168,15 +252,16 @@ async def _show_deal_summary_for_acceptance(context: ContextTypes.DEFAULT_TYPE, 
             f"👤 **{initiator_name}** (BUYER)\n"
             f"� **{target_name}** (SELLER - You)\n\n"
             f"{'─'*40}\n\n"
-            f"�💰 **INR Amount:** ₹{amount_num}\n"
+            f"�💰 **USDT Amount:** {amount}\n"
         )
         if inr_rate:
             summary += f"📊 **Rate:** ₹{inr_rate}/USDT\n"
             try:
-                inr_val = float(amount_num.replace(',', ''))
+                usdt_val = float(amount_num.replace(',', ''))
                 rate_val = float(str(inr_rate).replace(',', ''))
-                usdt_equiv = inr_val / rate_val
-                summary += f"💵 **You will send:** ~{usdt_equiv:.2f} USDT\n"
+                inr_total = usdt_val * rate_val
+                summary += f"💵 **You will send:** {usdt_val:.2f} USDT\n"
+                summary += f"💰 **You will receive:** ₹{inr_total:,.2f} INR\n"
             except Exception:
                 pass
         if payment_method:
@@ -233,6 +318,7 @@ async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         
         # Cancel the deal
         await db.update_deal_status(deal["id"], "cancelled")
+        await update_main_group_deal_status(context, deal["id"], "cancelled")
         await msg.reply_text("✅ Deal cancelled successfully.")
         
         # Release group and notify users to leave manually
@@ -308,11 +394,11 @@ async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
     group_chat_id = free_group["chat_id"]
 
-    # create invite link with member_limit=2 (buyer + seller)
+    # create invite link with join request approval
     try:
         invite_link_obj = await context.bot.create_chat_invite_link(
             chat_id=group_chat_id,
-            member_limit=2,
+            creates_join_request=True,  # Requires approval - bot auto-approves only participants
             name=f"Deal {initiator_id}-{target_id}",
         )
         invite_link = invite_link_obj.invite_link
@@ -377,7 +463,7 @@ async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
 
 async def handle_chat_join_request(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Auto-approve join requests for deal participants and admin only."""
+    """Auto-approve join requests for deal participants only."""
     join_request = update.chat_join_request
     if not join_request:
         return
@@ -391,7 +477,7 @@ async def handle_chat_join_request(update: Update, context: ContextTypes.DEFAULT
         # No deal found for this group, decline
         try:
             await context.bot.decline_chat_join_request(chat_id=group_chat_id, user_id=user_id)
-            logger.info(f"Declined join request from {user_id} - no active deal in group {group_chat_id}")
+            logger.info(f"❌ Declined join request from {user_id} - no active deal in group {group_chat_id}")
         except Exception as e:
             logger.exception(f"Failed to decline join request: {e}")
         return
@@ -407,14 +493,26 @@ async def handle_chat_join_request(update: Update, context: ContextTypes.DEFAULT
         # Approve the join request
         try:
             await context.bot.approve_chat_join_request(chat_id=group_chat_id, user_id=user_id)
-            logger.info(f"Approved join request for user {user_id} in deal #{deal['id']}")
+            logger.info(f"✅ Approved join request for user {user_id} in deal #{deal['id']}")
+            
+            # Send welcome notification in group
+            try:
+                user_chat = await context.bot.get_chat(user_id)
+                user_name = f"@{user_chat.username}" if user_chat.username else user_chat.full_name
+            except Exception:
+                user_name = f"User {user_id}"
+            
+            await context.bot.send_message(
+                chat_id=group_chat_id,
+                text=f"✅ {user_name} joined the deal room!"
+            )
         except Exception as e:
             logger.exception(f"Failed to approve join request: {e}")
     else:
         # Decline unauthorized users
         try:
             await context.bot.decline_chat_join_request(chat_id=group_chat_id, user_id=user_id)
-            logger.info(f"Declined join request from unauthorized user {user_id} in deal #{deal['id']}")
+            logger.info(f"❌ Declined join request from unauthorized user {user_id} in deal #{deal['id']}")
         except Exception as e:
             logger.exception(f"Failed to decline join request: {e}")
 
@@ -446,8 +544,12 @@ async def handle_new_chat_members(update: Update, context: ContextTypes.DEFAULT_
     # Show member count when someone joins
     member_count = (1 if initiator_joined else 0) + (1 if target_joined else 0)
     
-    # Show who just joined
+    # Show who just joined (only show each unique user once)
+    seen_users = set()
     for new_member in msg.new_chat_members:
+        if new_member.id in seen_users:
+            continue
+        seen_users.add(new_member.id)
         username = f"@{new_member.username}" if new_member.username else (new_member.full_name or new_member.first_name)
         await context.bot.send_message(
             chat_id=group_chat_id,
@@ -461,7 +563,21 @@ async def handle_new_chat_members(update: Update, context: ContextTypes.DEFAULT_
     # Both joined! Now occupy the group and start the deal flow
     await db.occupy_group(group_chat_id, deal["id"])
     
-    # Send "Deal in Progress" message to MAIN GROUP
+    # Delete the invite link message from main group
+    invite_msg_data = context.bot_data.get(f"invite_msg_{deal['id']}")
+    if invite_msg_data:
+        try:
+            await context.bot.delete_message(
+                chat_id=invite_msg_data["chat_id"],
+                message_id=invite_msg_data["message_id"]
+            )
+            logger.info(f"Deleted invite message for deal #{deal['id']}")
+            # Clean up bot_data
+            del context.bot_data[f"invite_msg_{deal['id']}"]
+        except Exception as e:
+            logger.exception(f"Failed to delete invite message: {e}")
+    
+    # Send "Deal in Progress" message to MAIN GROUP and store message_id
     if MAIN_GROUP_ID:
         try:
             initiator_chat = await context.bot.get_chat(deal["initiator_id"])
@@ -469,10 +585,18 @@ async def handle_new_chat_members(update: Update, context: ContextTypes.DEFAULT_
             initiator_name = f"@{initiator_chat.username}" if initiator_chat.username else (initiator_chat.full_name or f"User {deal['initiator_id']}")
             target_name = f"@{target_chat.username}" if target_chat.username else (target_chat.full_name or f"User {deal['target_id']}")
             
-            await context.bot.send_message(
+            main_msg = await context.bot.send_message(
                 chat_id=MAIN_GROUP_ID,
-                text=f"🔄 Deal #{deal['id']} in Progress\n\n👤 {initiator_name}\n👤 {target_name}"
+                text=f"🔄 Deal #{deal['id']} - In Progress\n\n👤 {initiator_name}\n👤 {target_name}"
             )
+            
+            # Update deal with main group message_id
+            async with db.aiosqlite.connect(db.DB_PATH) as conn:
+                await conn.execute(
+                    "UPDATE deals SET main_group_msg_id = ? WHERE id = ?",
+                    (main_msg.message_id, deal['id'])
+                )
+                await conn.commit()
         except Exception as e:
             logger.exception("Failed to send deal in progress message to main group: %s", e)
     
@@ -491,13 +615,14 @@ async def handle_new_chat_members(update: Update, context: ContextTypes.DEFAULT_
         # Welcome message
         welcome_msg = (
             f"👋 Welcome to Deal #{deal['id']}!\n\n"
-            f"👤 Initiator: {initiator_name}\n"
-            f"👤 Counterparty: {target_name}\n\n"
-            "Let's start the deal process!\n"
-            f"{initiator_name}, please select your role:"
+            f"👤 {initiator_name}\n"
+            f"👤 {target_name}\n\n"
+            "🎯 **First person to select becomes that role!**\n"
+            "The other person will automatically get the opposite role.\n\n"
+            "Please select your role:"
         )
         
-        # Role selection for initiator - simplified (only "I'm Selling" button)
+        # Role selection available to BOTH users
         keyboard = InlineKeyboardMarkup([
             [InlineKeyboardButton("� I am the Seller", callback_data=f"start_role:{deal['id']}:seller")],
             [InlineKeyboardButton("� I am the Buyer", callback_data=f"start_role:{deal['id']}:buyer")],
@@ -594,6 +719,21 @@ async def handle_group_messages(update: Update, context: ContextTypes.DEFAULT_TY
             [InlineKeyboardButton("❌ Reject Rate", callback_data=f"reject_rate:{deal['id']}")],
         ])
         
+        # Send confirmation to buyer showing what they will pay
+        buyer_confirmation = (
+            f"✅ **Rate Proposed:** ₹{rate_val}/USDT\n\n"
+            f"📊 **Your Payment Breakdown:**\n"
+            f"• You will receive: {total_usdt} USDT\n"
+            f"• You will pay: ₹{total_inr:,.2f} INR\n\n"
+            f"⏳ Waiting for {seller_name} to accept your rate..."
+        )
+        await context.bot.send_message(
+            chat_id=msg.chat_id,
+            text=buyer_confirmation,
+            parse_mode="Markdown"
+        )
+        
+        # Send rate proposal to seller
         await msg.reply_text(summary, reply_markup=keyboard, parse_mode="Markdown")
         return
 
@@ -615,6 +755,7 @@ async def handle_group_messages(update: Update, context: ContextTypes.DEFAULT_TY
         # Save TX link
         await db.update_deal(deal["id"], tx_link=text)
         await db.update_deal_status(deal["id"], "verified")  # Move to verified status
+        await update_main_group_deal_status(context, deal["id"], "verified")
         
         await msg.reply_text("✅ Transaction link submitted successfully!")
         
@@ -635,38 +776,57 @@ async def handle_group_messages(update: Update, context: ContextTypes.DEFAULT_TY
         )
         return
 
-    # Only process setup messages from initiator during pending status
+    # Only process setup messages during pending status
     # Allow free chat during other statuses
     if deal.get("status") not in ["pending"]:
         # Deal in progress - allow free chat between users
         return
     
-    if msg.from_user.id != deal["initiator_id"]:
-        # Not the initiator during setup - ignore
+    # Determine who should be entering data based on the flow state
+    role = deal.get("initiator_role", "pending")
+    
+    # During initial setup, check who should be providing input
+    # If roles not set yet, ignore messages (waiting for role selection)
+    if role == "pending":
         return
+    
+    # Determine who is seller and buyer
+    seller_id = deal["initiator_id"] if role == "seller" else deal["target_id"]
+    buyer_id = deal["target_id"] if role == "seller" else deal["initiator_id"]
 
     # Check what we're waiting for based on deal state
     # Waiting for amount (currency is set, amount is still "pending")
     if deal.get("currency") and deal.get("currency") != "pending" and deal.get("amount") == "pending":
+        # EITHER seller or buyer can enter USDT amount (both enter USDT in this bot)
+        # Check if message is from one of the participants
+        if msg.from_user.id not in [deal["initiator_id"], deal["target_id"]]:
+            return
+        
         try:
             amount_val = float(text.replace(',', ''))
             if amount_val <= 0:
-                raise ValueError
+                raise ValueError("Amount must be positive")
         except ValueError:
             await msg.reply_text("❌ Please enter a valid number for amount.")
             return
+        
+        # ✅ VALIDATION: Check amount bounds
+        valid, error_msg = security.validate_usdt_amount(amount_val)
+        if not valid:
+            await msg.reply_text(error_msg)
+            return
+        
+        # ✅ SECURITY: Log amount entry
+        await security.log_activity(msg.from_user.id, "AMOUNT_ENTERED", deal["id"], f"Amount: {amount_val} USDT")
 
-        role = deal.get("initiator_role", "")
-        # Both seller and buyer enter USDT amount
+        # Both seller and buyer enter USDT amount (this is a USDT trading bot)
         amount_text = f"{text} USDT"
         await db.update_deal(deal["id"], amount=amount_text)
         await msg.reply_text(f"✅ Amount: {amount_text}")
 
-        currency = deal.get("currency", "")
-
-        # NEW LOGIC: Seller=USDT, Buyer=INR
-        if role == "seller":
-            # Seller is selling USDT - ask for network
+        # Determine next step based on who is seller
+        if msg.from_user.id == seller_id:
+            # Seller entered amount - ask for network
             await msg.reply_text(
                 "🌐 Select the blockchain network for this deal:\n"
                 "⚠️ BSC has NO surcharge, other networks add +$0.70"
@@ -679,7 +839,7 @@ async def handle_group_messages(update: Update, context: ContextTypes.DEFAULT_TY
             ])
             await msg.reply_text("Select network:", reply_markup=keyboard)
         else:
-            # Buyer is paying INR - ask for rate they're willing to pay
+            # Buyer entered amount - ask for rate they're willing to pay
             await msg.reply_text("💱 Please type the INR to USDT rate you're willing to pay (e.g., 92):")
 
     # Waiting for INR rate (from buyer)
@@ -687,10 +847,19 @@ async def handle_group_messages(update: Update, context: ContextTypes.DEFAULT_TY
         try:
             rate_val = float(text.replace(',', ''))
             if rate_val <= 0:
-                raise ValueError
+                raise ValueError("Rate must be positive")
         except ValueError:
             await msg.reply_text("❌ Please enter a valid rate (e.g., 92):")
             return
+        
+        # ✅ VALIDATION: Check rate bounds
+        valid, error_msg = security.validate_inr_rate(rate_val)
+        if not valid:
+            await msg.reply_text(error_msg)
+            return
+        
+        # ✅ SECURITY: Log rate entry
+        await security.log_activity(msg.from_user.id, "RATE_PROPOSED", deal["id"], f"Rate: ₹{rate_val}/USDT")
 
         await db.update_deal(deal["id"], inr_rate=text)
         await msg.reply_text(f"✅ INR Rate: ₹{text}/USDT")
@@ -721,41 +890,71 @@ async def callback_query_handler(update: Update, context: ContextTypes.DEFAULT_T
             await q.edit_message_text(MSG_DEAL_NOT_FOUND)
             return
 
-        # Verify it's the initiator
-        if q.from_user.id != deal["initiator_id"]:
-            try:
-                initiator_chat = await context.bot.get_chat(deal["initiator_id"])
-                initiator_name = f"@{initiator_chat.username}" if initiator_chat.username else initiator_chat.full_name
-            except Exception:
-                initiator_name = MSG_THE_INITIATOR
-            await q.answer(f"⚠️ This is the INITIATOR's action. Wait for {initiator_name} to select role.", show_alert=True)
+        # Allow BOTH users to select their role (first one to select gets that role)
+        user_id = q.from_user.id
+        
+        # Check if user is part of this deal
+        if user_id not in [deal["initiator_id"], deal["target_id"]]:
+            await q.answer("⚠️ You are not part of this deal.", show_alert=True)
+            return
+        
+        # Check if roles already assigned
+        if deal.get("initiator_role") != "pending":
+            await q.answer("⚠️ Roles already selected!", show_alert=True)
+            return
+        
+        # ✅ RATE LIMITING: Check role switch cooldown
+        allowed, reason = await security.check_rate_limit_role_switch(user_id)
+        if not allowed:
+            await q.answer(reason, show_alert=True)
             return
         
         await q.answer()  # Acknowledge the callback query
-
-        # Update role
-        await db.update_deal(deal_id, initiator_role=role)
         
-        # Set currency based on role:
-        # SELLER = selling USDT (crypto)
-        # BUYER = paying INR
-        if role == "seller":
-            # Seller sells USDT
-            await db.update_deal(deal_id, currency="crypto")
-            await q.edit_message_text(
-                "💰 Role selected: SELLER\n"
-                "💵 You are selling: USDT\n\n"
-                "Please type the USDT amount you want to sell (e.g., 100):"
-            )
+        # ✅ SECURITY: Update role switch timestamp and log activity
+        await security.update_user_cache_role_switch(user_id)
+        await security.log_activity(user_id, "ROLE_SELECTED", deal_id, f"Role: {role}")
+
+        # Determine who selected what
+        # Determine roles based on who selected
+        if user_id == deal["initiator_id"]:
+            # Initiator selected role
+            target_role = "buyer" if role == "seller" else "seller"
+            await db.update_deal(deal_id, initiator_role=role, target_role=target_role)
         else:
-            # Buyer pays INR, receives USDT
-            await db.update_deal(deal_id, currency="inr")
-            await q.edit_message_text(
-                "🛒 Role selected: BUYER\n"
-                "💵 You are paying with: INR\n"
-                "🪙 You will receive: USDT\n\n"
-                "Please type the USDT amount you want to buy (e.g., 100):"
-            )
+            # Target selected role
+            initiator_role = "buyer" if role == "seller" else "seller"
+            await db.update_deal(deal_id, target_role=role, initiator_role=initiator_role)
+        
+        # Get both user names using helper function
+        try:
+            user_chat = await context.bot.get_chat(user_id)
+            user_name = get_user_display_name(user_chat)
+            other_id = deal["target_id"] if user_id == deal["initiator_id"] else deal["initiator_id"]
+            other_chat = await context.bot.get_chat(other_id)
+            other_name = get_user_display_name(other_chat)
+        except Exception:
+            user_name = f"User {user_id}"
+            other_name = "Other user"
+        
+        other_role = "buyer" if role == "seller" else "seller"
+        
+        # Announce role selection to both
+        role_announcement = (
+            f"✅ **Roles Confirmed!**\n\n"
+            f"👤 {user_name}: {role.upper()}\n"
+            f"👤 {other_name}: {other_role.upper()}\n\n"
+            "━━━━━━━━━━━━━━━━━\n"
+        )
+        
+        # Always set currency to crypto (USDT only bot)
+        await db.update_deal(deal_id, currency="crypto")
+        
+        # Both seller and buyer enter USDT amount, show appropriate message
+        await q.edit_message_text(
+            role_announcement +
+            f"💰 **{role.upper()}**, please type the USDT amount (e.g., 100):"
+        )
 
     # DEPRECATED: Currency selection removed - USDT only now
     # elif data.startswith("start_currency:"):
@@ -768,14 +967,17 @@ async def callback_query_handler(update: Update, context: ContextTypes.DEFAULT_T
             await q.edit_message_text(MSG_DEAL_NOT_FOUND)
             return
 
-        # Verify it's the initiator
-        if q.from_user.id != deal["initiator_id"]:
+        # Verify it's the SELLER (who selects network)
+        role = deal.get("initiator_role")
+        seller_id = deal["initiator_id"] if role == "seller" else deal["target_id"]
+        
+        if q.from_user.id != seller_id:
             try:
-                initiator_chat = await context.bot.get_chat(deal["initiator_id"])
-                initiator_name = f"@{initiator_chat.username}" if initiator_chat.username else initiator_chat.full_name
+                seller_chat = await context.bot.get_chat(seller_id)
+                seller_name = f"@{seller_chat.username}" if seller_chat.username else seller_chat.full_name
             except Exception:
-                initiator_name = MSG_THE_INITIATOR
-            await q.answer(f"⚠️ This is the INITIATOR's action. Wait for {initiator_name} to select the network.", show_alert=True)
+                seller_name = MSG_THE_SELLER
+            await q.answer(f"⚠️ This is the SELLER's action. Wait for {seller_name} to select the network.", show_alert=True)
             return
         
         # ✅ Acknowledge callback query
@@ -808,14 +1010,17 @@ async def callback_query_handler(update: Update, context: ContextTypes.DEFAULT_T
             await q.edit_message_text(MSG_DEAL_NOT_FOUND)
             return
 
-        # Verify it's the initiator
-        if q.from_user.id != deal["initiator_id"]:
+        # Verify it's the BUYER (who selects payment method)
+        role = deal.get("initiator_role")
+        buyer_id = deal["target_id"] if role == "seller" else deal["initiator_id"]
+        
+        if q.from_user.id != buyer_id:
             try:
-                initiator_chat = await context.bot.get_chat(deal["initiator_id"])
-                initiator_name = f"@{initiator_chat.username}" if initiator_chat.username else initiator_chat.full_name
+                buyer_chat = await context.bot.get_chat(buyer_id)
+                buyer_name = f"@{buyer_chat.username}" if buyer_chat.username else buyer_chat.full_name
             except Exception:
-                initiator_name = MSG_THE_INITIATOR
-            await q.answer(f"⚠️ This is the INITIATOR's action. Wait for {initiator_name} to select payment method.", show_alert=True)
+                buyer_name = MSG_THE_BUYER
+            await q.answer(f"⚠️ This is the BUYER's action. Wait for {buyer_name} to select payment method.", show_alert=True)
             return
         
         # ✅ Acknowledge callback query
@@ -840,7 +1045,7 @@ async def callback_query_handler(update: Update, context: ContextTypes.DEFAULT_T
         amount = deal.get("amount", "Unknown")
         inr_rate = deal.get("inr_rate")
         
-        # Build comprehensive summary for BUYER (INR) initiator
+        # Build comprehensive summary for BUYER initiator
         summary = (
             "📋 **Deal Summary - Please Review**\n"
             f"{'='*40}\n\n"
@@ -849,16 +1054,17 @@ async def callback_query_handler(update: Update, context: ContextTypes.DEFAULT_T
             f"{'─'*40}\n\n"
         )
         
-        # Buyer is paying INR
-        summary += f"💰 **INR Amount:** {amount}\n"
+        # Buyer wants to buy USDT, will pay INR
+        summary += f"💰 **USDT Amount:** {amount}\n"
         if inr_rate:
             summary += f"📊 **Rate:** ₹{inr_rate}/USDT\n"
             try:
-                # Calculate USDT equivalent
-                inr_val = float(amount.split()[0].replace(',', ''))
+                # Calculate INR total buyer will pay
+                usdt_val = float(amount.split()[0].replace(',', ''))
                 rate_val = float(str(inr_rate).replace(',', ''))
-                usdt_equiv = inr_val / rate_val
-                summary += f"💵 **You will receive:** ~{usdt_equiv:.2f} USDT\n"
+                inr_total = usdt_val * rate_val
+                summary += f"💵 **You will send:** {usdt_val:.2f} USDT\n"
+                summary += f"💰 **You will receive:** ₹{inr_total:,.2f} INR\n"
             except Exception:
                 pass
         
@@ -926,44 +1132,17 @@ async def callback_query_handler(update: Update, context: ContextTypes.DEFAULT_T
         seller_is_initiator = (role == "seller")
         buyer_id = deal["target_id"] if seller_is_initiator else deal["initiator_id"]
         
-        # For crypto deals: Ask ANYONE to propose INR rate (seller or buyer)
-        if currency == "crypto":
-            await context.bot.send_message(
-                chat_id=deal["group_chat_id"],
-                text=(
-                    "💱 Please type your proposed INR rate per USDT.\n\n"
-                    "Example: Type '92' for ₹92/USDT\n\n"
-                    "Either party can propose the rate."
-                )
+        # Ask buyer to propose INR rate
+        await context.bot.send_message(
+            chat_id=deal["group_chat_id"],
+            text=(
+                "💱 Please type your proposed INR rate per USDT.\n\n"
+                "Example: Type '92' for ₹92/USDT\n\n"
+                "Buyer proposes the rate, seller accepts/rejects."
             )
-            # Set a flag so we know we're waiting for rate
-            await db.update_deal(deal_id, status="awaiting_buyer_rate")
-        else:
-            # INR deal - already has rate, just confirm
-            await db.update_deal_status(deal_id, "confirmed")
-            
-            seller_id = deal["initiator_id"] if seller_is_initiator else deal["target_id"]
-            try:
-                seller_chat = await context.bot.get_chat(seller_id)
-                seller_name = f"@{seller_chat.username}" if seller_chat.username else (seller_chat.full_name or f"User {seller_id}")
-            except Exception:
-                seller_name = f"User {seller_id}"
-            
-            # Add button for seller to submit transaction
-            keyboard = InlineKeyboardMarkup([
-                [InlineKeyboardButton("📤 Submit Transaction", callback_data=f"submit_tx_button:{deal_id}")],
-            ])
-            
-            await context.bot.send_message(
-                chat_id=deal["group_chat_id"],
-                text=(
-                    "✅ Deal Confirmed!\n\n"
-                    "Next Step:\n"
-                    f"Seller ({seller_name}): Click the button below to submit your transaction details.\n"
-                    "After admin verification, buyer will send fiat payment proof."
-                ),
-                reply_markup=keyboard
-            )
+        )
+        # Set a flag so we know we're waiting for rate
+        await db.update_deal(deal_id, status="awaiting_buyer_rate")
 
     elif data.startswith("reject_deal:"):
         _, deal_id_str = data.split(":")
@@ -983,10 +1162,31 @@ async def callback_query_handler(update: Update, context: ContextTypes.DEFAULT_T
             await q.answer(f"⚠️ This is the COUNTERPARTY's action. Wait for {target_name} to reject or accept.", show_alert=True)
             return
         
+        # ✅ RATE LIMITING: Check rejection cooldown (uses same limit as cancellation)
+        user_id = q.from_user.id
+        allowed, reason = await security.check_rate_limit_cancel(user_id)
+        if not allowed:
+            await q.answer(reason, show_alert=True)
+            return
+        
         # ✅ Acknowledge callback query
         await q.answer()
+        
+        # ✅ SECURITY: Update cache and log activity
+        await security.update_user_cache_deal_cancelled(user_id)
+        await security.log_activity(user_id, "DEAL_REJECTED", deal_id, f"Rejected by user {user_id}")
+        
+        # ✅ SECURITY: Check for suspicious rejection patterns
+        suspicious = await security.detect_suspicious_activity(user_id)
+        if suspicious:
+            await send_log_notification(
+                context,
+                f"🚨 <b>SECURITY ALERT - REJECTION</b>\n\n{suspicious}\nUser ID: {user_id}\nDeal ID: #{deal_id}"
+            )
+        
         await q.edit_message_text("❌ Deal rejected by counterparty")
         await db.update_deal_status(deal_id, "cancelled")
+        await update_main_group_deal_status(context, deal_id, "cancelled")
         
         # Send notification to logs group
         try:
@@ -1179,10 +1379,31 @@ async def callback_query_handler(update: Update, context: ContextTypes.DEFAULT_T
             await q.edit_message_text(MSG_DEAL_NOT_FOUND)
             return
         
+        # ✅ RATE LIMITING: Check cancellation cooldown
+        user_id = q.from_user.id
+        allowed, reason = await security.check_rate_limit_cancel(user_id)
+        if not allowed:
+            await q.answer(reason, show_alert=True)
+            return
+        
         # ✅ Acknowledge callback query
         await q.answer()
+        
+        # ✅ SECURITY: Update cancellation cache and log activity
+        await security.update_user_cache_deal_cancelled(user_id)
+        await security.log_activity(user_id, "DEAL_CANCELLED", deal_id, f"Cancelled by user {user_id}")
+        
+        # ✅ SECURITY: Check for suspicious cancellation patterns
+        suspicious = await security.detect_suspicious_activity(user_id)
+        if suspicious:
+            await send_log_notification(
+                context,
+                f"🚨 <b>SECURITY ALERT - CANCELLATION</b>\n\n{suspicious}\nUser ID: {user_id}\nDeal ID: #{deal_id}"
+            )
+        
         await q.edit_message_text("❌ Deal cancelled")
         await db.update_deal_status(deal_id, "cancelled")
+        await update_main_group_deal_status(context, deal_id, "cancelled")
         
         # Send notification to logs group
         try:
@@ -1213,87 +1434,6 @@ async def callback_query_handler(update: Update, context: ContextTypes.DEFAULT_T
                 )
             except Exception as e:
                 logger.exception("Failed to send leave message: %s", e)
-
-    # OLD network/token handlers - DEPRECATED
-    # Network and token are now selected DURING deal setup (start_network/start_token)
-    # NOT after acceptance. Keeping for reference only.
-    # elif data.startswith("network:"):
-    # elif data.startswith("token:"):
-
-    # Old accept/reject handlers - keeping for backward compatibility
-    elif data.startswith("accept:"):
-        deal_id = int(data.split(":", 1)[1])
-        deal = await db.get_deal(deal_id)
-        if not deal:
-            await q.edit_message_text(MSG_DEAL_NOT_FOUND)
-            return
-
-        # verify caller is target (seller)
-        if q.from_user.id != deal["target_id"]:
-            try:
-                seller_chat = await context.bot.get_chat(deal["target_id"])
-                seller_name = f"@{seller_chat.username}" if seller_chat.username else seller_chat.full_name
-            except Exception:
-                seller_name = MSG_THE_SELLER
-            await q.answer(f"⚠️ This is the SELLER's action. Wait for {seller_name} to accept.", show_alert=True)
-            return
-        
-        # ✅ Acknowledge callback query
-        await q.answer()
-        
-        await db.update_deal_status(deal_id, "accepted")
-        
-        # Get timestamp
-        from datetime import datetime
-        accepted_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        
-        # Enhanced acceptance message with deal summary
-        acceptance_msg = (
-            f"✅ **Deal #{deal_id} Accepted!**\n"
-            f"{'='*35}\n\n"
-            f"💰 Amount: {deal.get('amount', 'N/A')}\n"
-            f"💱 Currency: {deal.get('currency', 'N/A')}\n"
-            f"💳 Payment: {deal.get('payment_method', 'N/A')}\n"
-            f"✅ Accepted at: {accepted_time}\n\n"
-            "**Next Step:** Seller, click below to submit payment details."
-        )
-        
-        # send instructions and "Send Payment" button
-        keyboard = InlineKeyboardMarkup([[InlineKeyboardButton("💰 Send Payment", callback_data=f"send_payment:{deal_id}")]])
-        await q.edit_message_text(acceptance_msg, reply_markup=keyboard, parse_mode="Markdown")
-
-    elif data.startswith("reject:"):
-        deal_id = int(data.split(":", 1)[1])
-        deal = await db.get_deal(deal_id)
-        if not deal:
-            await q.edit_message_text(MSG_DEAL_NOT_FOUND)
-            return
-
-        if q.from_user.id != deal["target_id"]:
-            try:
-                seller_chat = await context.bot.get_chat(deal["target_id"])
-                seller_name = f"@{seller_chat.username}" if seller_chat.username else seller_chat.full_name
-            except Exception:
-                seller_name = MSG_THE_SELLER
-            await q.answer(f"⚠️ This is the SELLER's action. Wait for {seller_name} to reject or accept.", show_alert=True)
-            return
-        
-        # ✅ Acknowledge callback query
-        await q.answer()
-        
-        await db.update_deal_status(deal_id, "rejected")
-        await q.edit_message_text(f"❌ Deal {deal_id} rejected by seller.")
-        
-        # release group immediately
-        if deal["group_chat_id"]:
-            await db.release_group(deal["group_chat_id"])
-            try:
-                await context.bot.send_message(
-                    chat_id=deal["group_chat_id"],
-                    text="Deal rejected. This room is now free for the next deal."
-                )
-            except Exception as e:
-                logger.exception("Failed to send message: %s", e)
 
     elif data.startswith("send_payment:"):
         deal_id = int(data.split(":", 1)[1])
@@ -1404,6 +1544,7 @@ async def callback_query_handler(update: Update, context: ContextTypes.DEFAULT_T
         # ✅ Acknowledge callback query
         await q.answer()
         await db.update_deal_status(deal_id, "fiat_sent")
+        await update_main_group_deal_status(context, deal_id, "fiat_sent")
         
         # Send notification to logs group
         try:
@@ -1453,6 +1594,7 @@ async def callback_query_handler(update: Update, context: ContextTypes.DEFAULT_T
         # ✅ Acknowledge callback query
         await q.answer()
         await db.update_deal_status(deal_id, "fiat_received")
+        await update_main_group_deal_status(context, deal_id, "fiat_received")
         
         # Send notification to logs group
         try:
@@ -1549,6 +1691,7 @@ async def callback_query_handler(update: Update, context: ContextTypes.DEFAULT_T
         if deal.get("completed_initiator") and deal.get("completed_target"):
             # Both completed! Close deal and kick users
             await db.update_deal_status(deal_id, "closed")
+            await update_main_group_deal_status(context, deal_id, "closed")
             
             # Get user names for notification
             try:
@@ -1872,6 +2015,7 @@ def main() -> None:
     app.add_handler(CommandHandler("release_group", admin_release_group_cmd))
     app.add_handler(CommandHandler("reset_groups", admin_reset_all_groups))
     app.add_handler(CallbackQueryHandler(callback_query_handler))
+    # Join request handler - auto-approve only deal participants
     app.add_handler(ChatJoinRequestHandler(handle_chat_join_request))
     app.add_handler(MessageHandler(filters.StatusUpdate.NEW_CHAT_MEMBERS, handle_new_chat_members))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_group_messages))  # Handle text input in groups
